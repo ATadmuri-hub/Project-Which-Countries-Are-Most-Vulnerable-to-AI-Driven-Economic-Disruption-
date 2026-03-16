@@ -17,6 +17,23 @@ This project identifies which countries are most structurally vulnerable to AI-d
 - **Interactive maps** and temporal trajectory plots
 - **External validation** against Oxford AI Readiness Index
 
+## Selected Results
+
+### Global AI Vulnerability Index
+![Global AI Vulnerability Index — choropleth map. Red = more vulnerable, blue = more resilient.](figures/world-map-vulnerability-1.png)
+
+### Vulnerability Rankings by Country
+![Country-level vulnerability rankings colored by development tier (advanced, emerging, developing).](figures/vulnerability-rankings-1.png)
+
+### Exposure vs. Resilience
+![Scatter plot of Exposure vs. Resilience dimensions. Countries above the diagonal are net-exposed (most vulnerable); below are net-resilient.](figures/exposure-resilience-1.png)
+
+### Cluster Profile Heatmap
+![Heatmap of z-scored cluster means on 11 structural indicators. Shows how K-Means clusters differ across dimensions.](figures/cluster-profile-heatmap-1.png)
+
+### External Validation — Oxford AI Readiness Index
+![Oxford AI Readiness pillars by cluster (z-standardised). Confirms that high-vulnerability clusters score lowest on readiness.](figures/external-validation-oxford-1.png)
+
 ## How to Run
 
 1. Place supplementary CSVs in `data/`:
@@ -51,6 +68,7 @@ tidyverse, janitor, WDI, countrycode, FactoMineR, factoextra, NbClust, cluster, 
 │   ├── global_ai_workforce_automation_2015_2025.csv  # Kaggle
 │   ├── gap_stat.rds               # Cached gap statistic
 │   └── nbclust.rds                # Cached NbClust result
+├── figures/                       # Key result figures for README
 ├── .gitignore
 └── README.md
 ```

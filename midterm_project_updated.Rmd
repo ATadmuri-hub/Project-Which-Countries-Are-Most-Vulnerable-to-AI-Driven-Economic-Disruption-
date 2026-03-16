@@ -1,0 +1,2699 @@
+---
+title: "Which Countries Are Most Vulnerable to AI-Driven Economic Disruption?"
+subtitle: "A Global Comparative Analysis —  Midterm Project, Advanced Modelling"
+author: "Abdullah Tadmuri"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    theme: flatly
+    highlight: zenburn
+    code_folding: show
+    fig_width: 11
+    fig_height: 8
+    css: style_updated.css
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE,
+  fig.align = "center", dpi = 130
+)
+
+# ---- Global config ----
+# START/END define the panel window.
+# REF_YEAR is set in {r feature-engineering} after data coverage is known —
+# it equals the year with the most complete-case observations.
+START <- 2015
+END   <- 2025
+```
+
+<div class="project-meta">
+  <span class="meta-item"><strong>Scope:</strong> Global — all World Bank member countries</span>
+  <span class="meta-sep">|</span>
+  <span class="meta-item"><strong>Method:</strong> PCA + K-Means · Hierarchical · GMM Clustering</span>
+  <span class="meta-sep">|</span>
+  <span class="meta-item"><strong>Panel:</strong> 2015–2025</span>
+  <span class="meta-sep">|</span>
+  <span class="meta-item"><strong>Course:</strong> Advanced Modelling · UC3M · 2025–2026</span>
+  <span class="meta-sep">|</span>
+  <span class="meta-item"><strong>Source:</strong> World Bank WDI + Oxford AI Readiness Index</span>
+</div>
+
+## Abstract
+
+This study identifies which countries are most structurally vulnerable to AI-driven economic disruption using a data-driven, unsupervised learning approach applied to World Bank WDI data (2015–2025). Eleven structural indicators spanning innovation capacity, human capital, digital infrastructure, labour market health, and employment composition are reduced via Principal Component Analysis and then classified using three independent clustering methods — K-Means, Hierarchical (Ward.D2), and Gaussian Mixture Models. Cross-method agreement is strong, and the resulting typology robustly distinguishes structurally resilient economies (high R&D, digital connectivity, and tertiary education) from structurally exposed economies (high agricultural employment, youth unemployment, and weak digital infrastructure). A composite Vulnerability Index — validated externally against the Oxford Insights Government AI Readiness Index 2025 — reveals that vulnerability clusters systematically along the global development hierarchy, though meaningful within-tier heterogeneity exists. Sensitivity analyses confirm ranking stability across alternative index specifications.
+
+# 1. Introduction
+
+Artificial intelligence is no longer a distant prospect — it is actively reshaping industries, displacing routine tasks, and creating entirely new categories of work. But this transformation is not hitting every country equally. A software engineer in Stockholm and a subsistence farmer in sub-Saharan Africa face profoundly different futures, and the structural characteristics of their national economies — investment in research, educational attainment, digital infrastructure, labour market composition — will largely determine how smoothly each country navigates the transition.
+
+This study asks a deceptively simple question with profound policy implications: *Which countries worldwide are most exposed to AI-driven economic disruption, and what makes some nations structurally more resilient than others?*
+
+## 1.1 Research Question
+
+**Which countries are most vulnerable to AI-driven economic disruption, and does vulnerability cluster systematically along the global development divide — separating high-income, middle-income, and low-income economies?**
+
+To answer this, we take a data-driven, unsupervised learning approach. Rather than imposing a pre-defined vulnerability framework, we let the data reveal the underlying structure of the global economy. We use **Principal Component Analysis (PCA)** to reduce a set of correlated structural indicators (11 variables) into a smaller set of interpretable dimensions, and then apply **three independent clustering methods** — K-Means, Hierarchical, and Model-Based (Gaussian Mixture) — to group countries with similar structural profiles. The convergence (or divergence) of these methods provides a robust, multi-validated picture of the global economic landscape in the age of AI.
+
+The analysis targets **all World Bank member countries** for which sufficient data is available across the 2015–2025 panel. Countries are stratified by the World Bank's income classification into three development tiers: **Advanced Economies** (high-income), **Emerging Economies** (upper and lower middle income), and **Developing Economies** (low-income). This three-tier structure — following the standard IMF and World Bank classification used in flagship reports such as the *World Economic Outlook* — allows us to ask whether the vulnerability patterns identified by our unsupervised methods mirror, or diverge from, the global income hierarchy, and to generate policy recommendations that are sensitive to the very different capacities of richer and poorer nations to adapt to technological disruption.
+
+## 1.2 Data Sources
+
+Our analysis draws on three complementary data sources, each contributing different dimensions of the vulnerability picture:
+
+| Source | Variables | Type |
+|-----------------------|-------------------------------|------------------|
+| World Bank WDI | R&D intensity, high-tech exports, tertiary education, GDP per capita, GDP growth, labour force participation, internet users, unemployment (total & youth), agricultural employment, industrial employment | Panel (2015–2025) |
+| Kaggle | AI automation rate, AI readiness score (synthetic) | Panel (2015–2025) |
+| Oxford Insights | Government AI Readiness Index 2025 (6 pillars) | Cross-section (2025) |
+
+The **World Bank World Development Indicators (WDI)** database is our exclusive primary source, providing internationally standardised macroeconomic, human capital, digital infrastructure, labour market, and employment structure variables for virtually every country in the world. Sourcing all structural indicators from a single, unified database eliminates the inconsistencies and coverage gaps that arise from combining multiple national statistical agencies. The **Kaggle** dataset supplements these with AI-specific synthetic metrics (treated as illustrative only). The **Oxford Insights** Government AI Readiness Index adds a policy dimension and, crucially, is itself a global index covering approximately 160 countries — making it more useful here than in a purely European analysis.
+
+Sources: World Bank DataBank (databank.worldbank.org); Oxford Insights (2025) *Government AI Readiness Index*; Kaggle *Global AI Workforce Automation 2015–2025* dataset.
+
+## 1.3 Literature Review
+
+The question of how automation and artificial intelligence reshape labour markets has been the subject of a rapidly growing literature since the seminal contribution of Frey and Osborne (2017), who estimated that 47% of US occupations were at high risk of computerisation. Their task-based framework — distinguishing routine from non-routine, cognitive from manual tasks — has since been applied to dozens of national labour markets and remains the conceptual foundation for automation risk assessment. However, Autor (2015) offered an important counterpoint, arguing that automation historically creates new tasks and occupations even as it destroys old ones, and that the net employment effect depends on institutional and educational factors that vary across countries.
+
+Acemoglu and Restrepo (2020) formalised this "automation versus new tasks" framework, showing that countries' capacity to generate new labour-intensive tasks determines whether automation leads to net job gains or losses. Their model predicts that countries with strong educational systems, R&D capacity, and digital infrastructure are better positioned to create complementary new tasks — precisely the structural buffers our analysis operationalises as "resilience." Brynjolfsson and McAfee (2014) emphasised that the current wave of AI-driven automation differs from previous technological revolutions in its speed, breadth, and ability to substitute for cognitive as well as manual tasks, making the transition challenge more acute for countries that lack adaptive capacity.
+
+At the macro level, several studies have used PCA and clustering methods to construct country typologies based on development indicators. The World Bank's annual income classification (World Bank 2024) provides a simple but widely used three- or four-tier stratification, while composite indices like the Oxford Insights Government AI Readiness Index (2025) and the World Economic Forum's Future of Jobs Report (2023) offer more nuanced assessments. Our analysis bridges these approaches: we use the structural indicators that underpin income classification but let unsupervised methods reveal whether the resulting groupings align with — or diverge from — the conventional development hierarchy.
+
+------------------------------------------------------------------------
+
+# 2. Setup & Data Collection
+
+This section handles the technical groundwork: loading R packages, defining helper functions, and pulling raw data from the World Bank API. The entire data collection pipeline is fully reproducible —running this code from a fresh R session will automatically fetch the latest available data and produce a unified panel ready for analysis.
+
+We load packages spanning five categories: **data wrangling** (tidyverse, janitor, countrycode), **API access** (WDI for World Bank), **dimensionality reduction and clustering** (FactoMineR, factoextra, NbClust, cluster, mclust), **visualisation** (corrplot, dendextend, ggrepel), and **geospatial mapping** (sf, rnaturalearth).
+
+```{r packages}
+# Packages used in this notebook.
+# IMPORTANT: Do NOT install packages inside the knitted report (grader machines may be offline).
+pkgs <- c(
+  "tidyverse", "janitor", "WDI", "countrycode",
+  "FactoMineR", "factoextra", "NbClust", "cluster", "mclust",
+  "psych", "dendextend", "corrplot",
+  "sf", "rnaturalearth", "rnaturalearthdata", "ggrepel",
+  "viridis", "gridExtra", "readxl",
+  "knitr", "kableExtra",
+  "plotly", "GGally", "ggalluvial", "MVN"
+)
+
+missing_pkgs <- setdiff(pkgs, rownames(installed.packages()))
+if (length(missing_pkgs) > 0) {
+  stop(
+    "Missing required packages: ", paste(missing_pkgs, collapse = ", "),
+    "
+Install them once (outside this notebook), then re-knit."
+  )
+}
+
+invisible(lapply(pkgs, library, character.only = TRUE))
+set.seed(123)
+```
+
+
+```{r helpers}
+# Standardize to z-scores (used throughout)
+z <- function(x) as.numeric(scale(x))
+
+# Map World Bank income group to a three-tier development classification
+income_to_tier <- function(income_group) {
+  case_when(
+    income_group == "High income"                                          ~ "Advanced Economies",
+    income_group %in% c("Upper middle income", "Lower middle income")     ~ "Emerging Economies",
+    income_group == "Low income"                                           ~ "Developing Economies",
+    TRUE                                                                   ~ NA_character_
+  )
+}
+
+# Colorblind-safe tier palette (Okabe–Ito) — defined once, reused everywhere.
+# Advanced = blue, Emerging = amber, Developing = green.
+tier_pal <- c(
+  "Advanced Economies"   = "#0072B2",
+  "Emerging Economies"   = "#E69F00",
+  "Developing Economies" = "#009E73"
+)
+
+```
+
+## 2.1 World Bank WDI —Structural Indicators (All Countries)
+
+The World Bank's World Development Indicators (WDI) database is our sole primary source of structural data. By sourcing all indicators from a single database, we avoid the cross-source inconsistencies that arise when merging national statistical agencies with different methodologies, coverage periods, and country definitions.
+
+We retrieve eleven indicators that collectively capture a country's capacity to generate, absorb, and benefit from technological innovation, alongside its exposure to automation-driven disruption:
+
+- **R&D Intensity** (% of GDP): Measures national commitment to research and development —a direct proxy for innovation capacity and the ability to create AI rather than merely be displaced by it.
+- **High-Tech Exports** (% of manufactured exports): Reflects the economy's current positioning in knowledge-intensive trade —a signal of structural sophistication.
+- **Tertiary Education** (% of population 25+ with at least a bachelor's degree): Captures the human capital base available to adapt to AI-driven changes.
+- **GDP per Capita** (constant 2015 USD): A broad measure of economic development and the fiscal capacity to invest in adjustment policies.
+- **GDP Growth** (%): Captures economic dynamism and recent trajectory.
+- **Labour Force Participation** (%): Measures how much of the working-age population is economically active.
+- **Internet Users** (% of population): A direct measure of digital infrastructure penetration at the population level —countries where the internet is widespread have a larger pool of digitally literate workers.
+- **Unemployment Rate** (% of total labour force, ILO modelled estimate): A key labour market health indicator.
+- **Youth Unemployment Rate** (% of labour force ages 15–24): High youth unemployment signals labour market rigidity and weak absorptive capacity —both of which amplify disruption risk.
+- **Agricultural Employment** (% of total employment): The share of the workforce in agriculture —a sector characterised by low digitalisation, high manual-task intensity, and significant automation exposure.
+- **Industrial Employment** (% of total employment): The share in industry (mining, manufacturing, construction, utilities) —a sector with large and growing automation exposure, particularly in assembly-line and repetitive manufacturing tasks.
+
+The `extra = TRUE` flag retrieves additional country metadata including the World Bank income group and geographic region, which we use to define our development tier classification.
+
+```{r fetch-wdi}
+# Disk-based caching (items 6 & 7):
+#   First run  (internet required): fetches from WDI API → saves data/wdi_START_END.rds
+#   Later runs (offline-safe):      loads the RDS directly, skipping the API entirely.
+# This guarantees reproducibility on grader machines without internet access.
+
+wdi_cache_file <- file.path("data", paste0("wdi_", START, "_", END, ".rds"))
+
+target_indicators <- c(
+  RD_Intensity   = "GB.XPD.RSDV.GD.ZS",
+  HiTech_Exports = "TX.VAL.TECH.MF.ZS",
+  Tertiary_Edu   = "SE.TER.CUAT.BA.ZS",
+  GDP_pc         = "NY.GDP.PCAP.KD",
+  GDP_Growth     = "NY.GDP.MKTP.KD.ZG",
+  Labor_Part     = "SL.TLF.CACT.ZS",
+  Internet_Users = "IT.NET.USER.ZS",
+  Unemp_Total    = "SL.UEM.TOTL.ZS",
+  Unemp_Youth    = "SL.UEM.1524.ZS",
+  Agric_Empl     = "SL.AGR.EMPL.ZS",
+  Industry_Empl  = "SL.IND.EMPL.ZS"
+)
+
+if (file.exists(wdi_cache_file)) {
+  wdi_fetched <- readRDS(wdi_cache_file)
+  cat("WDI panel loaded from disk cache:", wdi_cache_file, "\n")
+} else {
+  cat("Fetching WDI data from API (internet required on first run)...\n")
+
+  wdi_fetched <- tryCatch(
+    WDI(
+      indicator = target_indicators,
+      country   = "all",
+      start     = START,
+      end       = END,
+      extra     = TRUE
+    ),
+    error = function(e) {
+      stop(
+        "WDI API call failed. Run at least once with internet access to build the disk cache.\n",
+        "Error: ", conditionMessage(e)
+      )
+    }
+  )
+
+  # If any indicator was not returned, add it as NA rather than crashing (item 7)
+  for (nm in names(target_indicators)) {
+    if (!nm %in% names(wdi_fetched)) {
+      warning("Indicator '", nm, "' not returned by WDI API — column added as NA.")
+      wdi_fetched[[nm]] <- NA_real_
+    }
+  }
+
+  saveRDS(wdi_fetched, wdi_cache_file)
+  cat("WDI data saved to disk cache:", wdi_cache_file, "\n")
+}
+
+wdi_raw <- wdi_fetched |>
+  # Remove regional and income-group aggregates; keep country-level observations only
+  filter(
+    !is.na(income),
+    income != "Aggregates",
+    str_length(iso3c) == 3
+  ) |>
+  mutate(
+    Development_Tier = income_to_tier(income),
+    Development_Tier = factor(
+      Development_Tier,
+      levels = c("Advanced Economies", "Emerging Economies", "Developing Economies")
+    )
+  ) |>
+  select(iso3c, country, year, region, income, Development_Tier,
+         RD_Intensity, HiTech_Exports, Tertiary_Edu,
+         GDP_pc, GDP_Growth, Labor_Part,
+         Internet_Users, Unemp_Total, Unemp_Youth,
+         Agric_Empl, Industry_Empl)
+
+cat("WDI panel:", nrow(wdi_raw), "rows,",
+    n_distinct(wdi_raw$iso3c), "countries,",
+    min(wdi_raw$year), "-", max(wdi_raw$year), "\n")
+cat("Development Tier breakdown (most recent year):\n")
+wdi_raw |>
+  filter(year == max(year, na.rm = TRUE)) |>
+  count(Development_Tier) |>
+  print()
+```
+
+## 2.2 Country Classification & Scope
+
+The World Bank income group —retrieved above via `extra = TRUE` —provides our primary country stratification. We define three development tiers using the IMF and World Bank's standard income-threshold classification, which is recalculated annually using GNI per capita under the Atlas method:
+
+| Development Tier | World Bank Income Group | Approx. GNI per Capita (2023) | Representative Countries |
+|-----------------|------------------------|-------------------------------|--------------------------|
+| Advanced Economies | High income | > $13,845 | OECD members, wealthy Gulf states, Singapore, South Korea |
+| Emerging Economies | Upper + Lower middle | $1,136–$13,845 | China, Brazil, India, Indonesia, South Africa, Mexico |
+| Developing Economies | Low income | < $1,136 | Sub-Saharan Africa (many), parts of South/Southeast Asia |
+
+This terminology follows the IMF *World Economic Outlook* and World Bank *Global Economic Prospects* —the standard references in international economics. It is descriptive rather than evaluative, and it avoids the geopolitical connotations of older "world" numbering systems.
+
+## 2.3 Supplementary: Kaggle & Oxford Insights
+
+We supplement the official World Bank statistics with two additional sources. The **Kaggle AI Workforce Automation** dataset provides country-level estimates of automation rates and AI readiness scores. It is important to note that this dataset is *synthetically generated* —the values are modelled rather than observed —so we treat it strictly as an illustrative supplement. The **Oxford Insights Government AI Readiness Index** adds a policy dimension, scoring approximately 160 governments on their preparedness for AI across six pillars (governance, infrastructure, data availability, human capital, innovation, and government capacity). Unlike the European analysis it was previously used in, here its global coverage is a genuine asset.
+
+**Note on data files:** The supplementary CSV files should be placed in a `data/` subfolder within the same directory as this Rmd file. The zip submission should include both CSVs.
+
+```{r supplementary}
+# Kaggle AI automation panel (synthetic —for external validation only)
+ai_auto <- tryCatch({
+  read_csv(file.path("data", "global_ai_workforce_automation_2015_2025.csv"),
+           show_col_types = FALSE) |>
+    clean_names() |>
+    transmute(
+      iso3c = countrycode(country, "country.name", "iso3c", warn = FALSE),
+      year  = as.integer(year),
+      automation_rate    = automation_rate_percent,
+      ai_readiness_score = ai_readiness_score
+    ) |>
+    filter(!is.na(iso3c))
+}, error = function(e) {
+  message("Kaggle file not found in data/ —external validation will be skipped. ", e$message)
+  tibble(iso3c = character(), year = integer(),
+         automation_rate = numeric(), ai_readiness_score = numeric())
+})
+
+# Oxford Insights Government AI Readiness Index 2025 (global cross-section)
+ai_readiness <- tryCatch({
+  raw_ox <- read_csv(file.path("data", "ai_readiness_index.csv"),
+                     show_col_types = FALSE) |>
+    clean_names()   # normalises column names to snake_case (e.g., "Overall Score" -> "overall_score")
+
+  # Robustly resolve ISO3 codes whether the file has them or only country names
+  if ("iso3c" %in% names(raw_ox)) {
+    raw_ox <- raw_ox |> mutate(iso3c = as.character(iso3c))
+  } else {
+    raw_ox <- raw_ox |>
+      mutate(iso3c = countrycode(country, "country.name", "iso3c", warn = FALSE))
+  }
+
+  # Keep iso3c + ALL available Oxford pillar columns (item 26)
+  oxford_pillar_cols <- intersect(
+    c("overall_score", "policy_capacity", "ai_infrastructure",
+      "governance", "public_sector_adoption", "development_diffusion", "resilience"),
+    names(raw_ox)
+  )
+
+  raw_ox |>
+    select(iso3c, all_of(oxford_pillar_cols)) |>
+    filter(!is.na(iso3c))
+}, error = function(e) {
+  message("Oxford AI Readiness file not found in data/ — external validation will be skipped. ", e$message)
+  tibble(iso3c = character(), overall_score = numeric())
+})
+
+cat("Kaggle records loaded:", nrow(ai_auto), "\n")
+cat("Oxford AI Readiness records loaded:", nrow(ai_readiness), "\n")
+```
+
+## 2.4 Merge Master Panel
+
+With the primary and supplementary data loaded, we merge them into a single master panel dataset — one row per country per year. Joins are performed on ISO-3 country codes and year. Supplementary datasets are joined with `left_join()` so that their absence does not reduce the core panel. After each join we assert that no duplicate (iso3c, year) rows have been created — duplicates would indicate a join key mismatch and must be fixed explicitly, not silently averaged away.
+
+```{r merge}
+# item 9: left joins preserve the core WDI panel; supplementary data added by key.
+# We assert uniqueness after each join — duplicate (iso3c, year) rows indicate
+# a broken join key and must be fixed explicitly, not silently averaged away.
+all_data <- wdi_raw |>
+  left_join(ai_auto,      by = c("iso3c", "year")) |>
+  left_join(ai_readiness, by = "iso3c")
+
+dup_check <- all_data |> count(iso3c, year) |> filter(n > 1)
+if (nrow(dup_check) > 0) {
+  stop(
+    nrow(dup_check), " duplicate (iso3c, year) pairs detected after merges.\n",
+    "First offenders: ",
+    paste(with(head(dup_check, 5), paste0(iso3c, "/", year)), collapse = ", "),
+    "\nFix the join keys — do not silently average duplicates."
+  )
+}
+
+cat("Master panel:", nrow(all_data), "rows,",
+    n_distinct(all_data$iso3c), "countries,",
+    min(all_data$year), "-", max(all_data$year), "\n")
+```
+
+------------------------------------------------------------------------
+
+# 3. Pre-Processing & Descriptive Analysis
+
+Before applying any statistical technique, we must thoroughly understand the structure, quality, and distributional properties of our data. This section serves as a diagnostic checkpoint: we examine the data dimensions, assess missing values, define our analysis variables, inspect distributions, detect outliers, and explore the correlation structure. Each step informs critical decisions downstream.
+
+## 3.1 Data Structure
+
+A quick structural overview confirms the panel format and verifies that all expected variables are present.
+
+```{r structure}
+glimpse(all_data)
+```
+
+## 3.2 Missing Data Analysis
+
+Missing data is an unavoidable reality when working with global data. High-income countries tend to report comprehensively to the World Bank, while low-income countries —where reporting infrastructure is weaker —often have gaps in R&D spending, tertiary education attainment, and high-technology trade statistics. Understanding the pattern of missingness is critical: if gaps are systematic by development tier (as is likely), complete-case analysis may underrepresent low-income countries.
+
+```{r missing-data, fig.height=6}
+analysis_core <- c("RD_Intensity", "HiTech_Exports", "Tertiary_Edu",
+                   "GDP_pc", "GDP_Growth", "Labor_Part",
+                   "Internet_Users", "Unemp_Total", "Unemp_Youth",
+                   "Agric_Empl", "Industry_Empl")
+
+miss_pct <- all_data |>
+  select(all_of(analysis_core)) |>
+  summarise(across(everything(), \(x) mean(is.na(x)) * 100)) |>
+  pivot_longer(everything(), names_to = "Variable", values_to = "Pct_Missing") |>
+  arrange(desc(Pct_Missing))
+
+ggplot(miss_pct, aes(reorder(Variable, Pct_Missing), Pct_Missing)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = sprintf("%.1f%%", Pct_Missing)), hjust = -0.1, size = 3.5) +
+  coord_flip() +
+  labs(title = "Missing Data by Variable (Full Panel, All Countries)",
+       x = NULL, y = "% Missing") +
+  theme_minimal() +
+  ylim(0, max(miss_pct$Pct_Missing) * 1.2)
+```
+
+```{r missing-by-tier, fig.height=5}
+# Missingness by development tier highlights the systematic data gap
+all_data |>
+  filter(!is.na(Development_Tier)) |>
+  select(Development_Tier, all_of(analysis_core)) |>
+  group_by(Development_Tier) |>
+  summarise(across(everything(), \(x) mean(is.na(x)) * 100), .groups = "drop") |>
+  pivot_longer(-Development_Tier, names_to = "Variable", values_to = "Pct_Missing") |>
+  ggplot(aes(Variable, Pct_Missing, fill = Development_Tier)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = tier_pal) +
+  labs(title = "Missing Data by Variable and Development Tier",
+       subtitle = "Low-income countries have systematically higher missingness for R&D and education variables",
+       x = NULL, y = "% Missing", fill = "Tier") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r missing-table}
+miss_pct |>
+  kable(digits = 1, col.names = c("Variable", "% Missing"),
+        caption = "Overall Missing Data by Variable") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 3.3 Feature Engineering & Complete-Case Filter
+
+The eleven WDI variables used here are expressed as ratios or percentages of well-defined totals (ILO modelled estimates, total employment, total population), making them directly comparable across countries of all sizes. Germany and Luxembourg are compared on equal footing because all variables capture *structure*, not scale. This is a key advantage of the global WDI approach.
+
+We define our final analysis variable set and apply a **complete-case filter**: only country-year observations with valid values on all eleven analysis variables are retained. While this reduces sample size —particularly for low-income countries where R&D and tertiary education reporting is sparse —it ensures that PCA operates on a consistent, fully-observed matrix, which is a mathematical requirement for accurate eigenvalue decomposition.
+
+```{r feature-engineering}
+analysis_vars <- c(
+  "RD_Intensity",   # Innovation capacity
+  "HiTech_Exports", # Knowledge-economy positioning
+  "Tertiary_Edu",   # Human capital
+  "GDP_pc",         # Economic development level
+  "GDP_Growth",     # Economic dynamism (cyclical)
+  "Labor_Part",     # Labour market activity
+  "Internet_Users", # Digital infrastructure penetration
+  "Unemp_Total",    # Labour market distress (structural)
+  "Unemp_Youth",    # Youth labour market vulnerability
+  "Agric_Empl",     # Agricultural employment share (ILO % of total)
+  "Industry_Empl"   # Industrial employment share (ILO % of total)
+)
+
+df_cc <- all_data |>
+  filter(year >= START, year <= END,
+         !is.na(Development_Tier)) |>
+  filter(!if_any(all_of(analysis_vars), is.na))
+
+
+# Sanity checks: uniqueness of (country, year) after merges
+dup_keys <- df_cc |> count(iso3c, year) |> filter(n > 1)
+if (nrow(dup_keys) > 0) {
+  stop("Duplicate (iso3c, year) rows detected after merges. Investigate joins before proceeding.")
+}
+
+
+cat("Complete-case panel:", nrow(df_cc), "rows,",
+    n_distinct(df_cc$iso3c), "countries,",
+    length(analysis_vars), "analysis variables\n")
+cat("Variables:", paste(analysis_vars, collapse = ", "), "\n")
+
+# Compute reference year here (year with most complete-case observations)
+# so it is available to all subsequent chunks including tier-coverage
+latest_year <- df_cc |>
+  count(year) |>
+  slice_max(n, n = 1, with_ties = FALSE) |>
+  pull(year)
+cat("Reference year for cross-sectional analysis:", latest_year, "\n")
+```
+
+```{r set-ref-year-after-merge, include=FALSE}
+
+# Use the year with the most complete-case observations (computed above)
+REF_YEAR <- latest_year
+```
+
+
+```{r attrition-table}
+# Attrition / selection transparency (how the sample changes across filters)
+attr_tbl <- tibble(
+  step = c(
+    "Merged raw panel (all_data)",
+    paste0("Year window [", START, "–", END, "]"),
+    "With development tier (WB income group available)",
+    "Complete-case on analysis variables"
+  ),
+  rows = c(
+    nrow(all_data),
+    nrow(all_data |> filter(year >= START, year <= END)),
+    nrow(all_data |> filter(year >= START, year <= END, !is.na(Development_Tier))),
+    nrow(df_cc)
+  ),
+  countries = c(
+    n_distinct(all_data$iso3c),
+    n_distinct(all_data |> filter(year >= START, year <= END) |> pull(iso3c)),
+    n_distinct(all_data |> filter(year >= START, year <= END, !is.na(Development_Tier)) |> pull(iso3c)),
+    n_distinct(df_cc$iso3c)
+  )
+)
+
+attr_tbl |>
+  kable(caption = "Sample attrition across preprocessing steps") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+
+
+**Result:** The final analysis dataset contains `r nrow(df_cc)` observations (country-years), `r n_distinct(df_cc$iso3c)` countries, and `r length(analysis_vars)` structural indicators —satisfying the project requirements of $n > 100$ observations and $p \geq 10$ variables.
+
+<div class="stat-grid">
+<div class="stat-card">
+<div class="stat-value">`r n_distinct(df_cc$iso3c)`</div>
+<div class="stat-label">Countries</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">`r length(analysis_vars)`</div>
+<div class="stat-label">Variables</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">`r as.integer(END - START + 1)`</div>
+<div class="stat-label">Years (`r START`–`r END`)</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">3</div>
+<div class="stat-label">Clustering Methods</div>
+</div>
+<div class="stat-card">
+<div class="stat-value">`r formatC(nrow(df_cc), format = "d", big.mark = ",")`</div>
+<div class="stat-label">Observations</div>
+</div>
+</div>
+
+**A note on the Kaggle and Oxford Insights data:** These datasets were deliberately excluded from the core PCA/clustering pipeline. The Kaggle data is *synthetically generated*, so incorporating it alongside official statistics would contaminate the factor structure with artificial patterns. The Oxford Insights index is *cross-sectional* (one score per country, 2025 only), which is incompatible with our panel-based PCA. Both are used later as **external validators** in Section 5.8.
+
+### Countries Included and Excluded
+
+```{r country-coverage}
+# all_data already carries Development_Tier from the WDI fetch —use it directly
+all_targeted <- all_data |>
+  distinct(iso3c, country, Development_Tier) |>
+  arrange(country)
+
+included <- df_cc |>
+  distinct(iso3c, country, Development_Tier) |>
+  arrange(country)
+
+excluded <- all_data |>
+  distinct(iso3c, country, Development_Tier) |>
+  filter(!iso3c %in% included$iso3c) |>
+  arrange(Development_Tier, country)
+
+cat("Countries in source data:", n_distinct(all_data$iso3c), "\n")
+cat("Countries in final analysis:", nrow(included), "\n")
+cat("Countries excluded:", nrow(excluded), "\n\n")
+
+excluded |>
+  count(Development_Tier, name = "n_excluded") |>
+  kable(caption = "Excluded Countries by Development Tier") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+The table above confirms the anticipated pattern: the majority of excluded countries are in the Low-Income tier, primarily because R&D spending and tertiary education attainment data are not systematically reported to the World Bank by the world's least-developed economies. This systematic attrition is acknowledged as a limitation in Section 8.2 —the vulnerability rankings will under-represent the very poorest countries, which may in fact be the most vulnerable.
+
+### Development Tier Coverage in Final Analysis
+
+```{r tier-coverage}
+df_cc |>
+  filter(year == REF_YEAR)|>
+  count(Development_Tier, name = "n_countries") |>
+  kable(caption = paste0("Countries in Final Analysis by Development Tier (", latest_year, ")")) |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 3.4 Summary Statistics
+
+The descriptive statistics below provide a concise portrait of our analysis variables. For each indicator, we report the mean, standard deviation, quartiles, and range.
+
+```{r summary-stats}
+df_cc |>
+  select(all_of(analysis_vars)) |>
+  pivot_longer(everything(), names_to = "Variable") |>
+  group_by(Variable) |>
+  summarise(
+    Mean   = mean(value),
+    SD     = sd(value),
+    Min    = min(value),
+    Q1     = quantile(value, 0.25),
+    Median = median(value),
+    Q3     = quantile(value, 0.75),
+    Max    = max(value),
+    .groups = "drop"
+  ) |>
+  kable(digits = 2, caption = "Summary Statistics of Analysis Variables") |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### Mean Values by Development Tier
+
+This pre-PCA comparison already reveals the broad structural differences between development levels that PCA will subsequently formalise.
+
+```{r tier-means, fig.height=9}
+df_cc |>
+  select(Development_Tier, all_of(analysis_vars)) |>
+  pivot_longer(-Development_Tier, names_to = "Variable", values_to = "Value") |>
+  group_by(Development_Tier, Variable) |>
+  summarise(Mean = mean(Value), .groups = "drop") |>
+  ggplot(aes(Development_Tier, Mean, fill = Development_Tier)) +
+  geom_col(alpha = 0.85) +
+  scale_fill_manual(values = tier_pal) +
+  facet_wrap(~ Variable, scales = "free_y", ncol = 3) +
+  labs(title = "Mean Variable Values by Development Tier",
+       subtitle = "Pre-PCA comparison: structural divergence across the global development hierarchy",
+       x = NULL, y = "Mean Value", fill = "Tier") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7))
+```
+
+## 3.5 Distributions
+
+Examining the distributional shape of each variable is essential for PCA, which works best when variables are roughly normally distributed. Variables like GDP per capita typically show pronounced right skew in a global sample —a handful of very wealthy countries pull the distribution tail rightward. Standardising to z-scores (which PCA does automatically via `scale.unit = TRUE`) corrects for differences in scale but does not eliminate skewness.
+
+```{r distributions, fig.height=11}
+df_cc |>
+  select(all_of(analysis_vars)) |>
+  pivot_longer(everything(), names_to = "Variable", values_to = "Value") |>
+  ggplot(aes(Value)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30,
+                 fill = "steelblue", alpha = 0.7) +
+  geom_density(colour = "darkred", linewidth = 0.8) +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  labs(title = "Distribution of Analysis Variables (All Country-Years)") +
+  theme_minimal()
+```
+
+## 3.6 Outlier Detection
+
+We use a z-score criterion (|z| > 3) to flag potential outliers. In a normal distribution, fewer than 0.3% of observations exceed this threshold, so any flagged values genuinely stand out. We retain all observations —extreme but real country-level values (e.g., Singapore's extraordinary high-tech export share, or a Gulf state's very low agricultural employment) represent genuine structural characteristics, not data errors.
+
+```{r outliers}
+z_outliers <- df_cc |>
+  select(all_of(analysis_vars)) |>
+  mutate(across(everything(), z)) |>
+  summarise(across(everything(), \(x) sum(abs(x) > 3))) |>
+  pivot_longer(everything(), names_to = "Variable", values_to = "Outliers_z3") |>
+  arrange(desc(Outliers_z3))
+
+z_outliers |>
+  kable(caption = "Number of Extreme Observations (|z| > 3) per Variable") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 3.7 Correlation Analysis
+
+The correlation matrix is the single most important diagnostic for PCA suitability. PCA works by compressing correlated variables into fewer dimensions —if variables are uncorrelated, there is nothing to compress. Conversely, strong correlations among groups of variables indicate redundant information that PCA can efficiently consolidate.
+
+The heatmap below displays Pearson correlation coefficients between all analysis variables.
+
+```{r correlation, fig.height=8}
+cor_mat <- cor(df_cc[, analysis_vars], use = "pairwise.complete.obs")
+
+corrplot(cor_mat, method = "color", type = "upper",
+         addCoef.col = "black", number.cex = 0.65,
+         tl.col = "black", tl.srt = 45, tl.cex = 0.8,
+         title = "Correlation Matrix of Analysis Variables", mar = c(0, 0, 2, 0))
+```
+
+**Key patterns from the global correlation structure:**
+
+- **A "development" cluster**: GDP per capita correlates strongly with R&D intensity (r=`r round(cor_mat["GDP_pc","RD_Intensity"], 2)`), internet users (r=`r round(cor_mat["GDP_pc","Internet_Users"], 2)`), and tertiary education (r=`r round(cor_mat["GDP_pc","Tertiary_Edu"], 2)`). This mirrors the well-established co-movement of economic development indicators globally —wealthier countries simultaneously invest more in R&D, educate more of their population to degree level, and have more of their citizens online.
+- **A "structural vulnerability" cluster**: Agricultural employment and total unemployment are positively correlated (r=`r round(cor_mat["Agric_Empl","Unemp_Total"], 2)`), and both are strongly negatively associated with GDP per capita. Countries with large agricultural sectors tend to be poorer, have weaker labour markets, and show lower digital infrastructure.
+- **A "youth labour market" signal**: Youth unemployment correlates strongly with total unemployment (r=`r round(cor_mat["Unemp_Youth","Unemp_Total"], 2)`) and negatively with GDP per capita, suggesting that young people in low-income countries face especially difficult labour market entry.
+
+These strong, interpretable correlation structures confirm that the data is well-suited for PCA — there is substantial shared variance to be compressed into a smaller number of meaningful dimensions.
+
+------------------------------------------------------------------------
+
+# 4. Principal Component Analysis (PCA)
+
+Principal Component Analysis is the backbone of our dimensionality reduction strategy. With `r length(analysis_vars)` correlated structural indicators, direct analysis would be unwieldy and prone to multicollinearity issues. PCA transforms the original variables into a new set of **principal components** — uncorrelated linear combinations ordered by the amount of variance they capture. The first component explains the most variance; each subsequent component captures the most remaining variance orthogonal to all preceding components.
+
+The practical benefit is twofold. First, PCA allows us to *visualise* the multi-dimensional structure of global economies on simple 2D plots. Second, clustering in PCA space reduces noise from minor components and avoids the "curse of dimensionality" — a phenomenon where distance-based methods degrade as the number of dimensions grows, because all pairs of points become nearly equidistant.
+
+**Important methodological note:** PCA is performed on the **reference-year cross-section** (`r REF_YEAR`), not the full panel, to avoid pseudo-replication (the same country appearing up to 11 times would inflate eigenvalues and violate the independence assumption). This ensures that each observation in the PCA is an independent country, and that the resulting eigenstructure, loadings, and scores are not contaminated by within-country temporal variation. The reference year is selected as the year with the most complete-case observations.
+
+PCA is performed on **standardised (z-scored) data** (`scale.unit = TRUE`). Standardisation is essential here because the 11 variables are measured on radically different scales — GDP per capita ranges in thousands of constant US dollars, while employment shares and internet penetration are bounded percentages. Without standardisation, high-variance variables (e.g., GDP per capita) would dominate the first principal component regardless of their conceptual importance. By converting each variable to z-scores (mean 0, SD 1) before decomposition, every indicator contributes equally to the analysis.
+
+```{r pca-cross-section, include=FALSE}
+# Create the reference-year cross-section for PCA (one row per country).
+# This eliminates pseudo-replication from the panel.
+df_ref <- df_cc |> filter(year == REF_YEAR)
+cor_mat_ref <- cor(df_ref[, analysis_vars], use = "pairwise.complete.obs")
+cat("Reference-year cross-section for PCA:", nrow(df_ref), "countries\n")
+```
+
+## 4.1 Data Suitability
+
+We apply three formal diagnostic tests before computing PCA:
+
+- The **Kaiser-Meyer-Olkin (KMO)** measure of sampling adequacy quantifies the proportion of variance among variables that might be caused by underlying common factors. Values above 0.5 are acceptable, above 0.7 good, and above 0.8 excellent (Kaiser 1974).
+- **Bartlett's test of sphericity** tests the null hypothesis that the correlation matrix is an identity matrix (all variables independent). A significant result ($p < 0.001$) confirms that meaningful correlations exist to exploit.
+- **Mardia's test of multivariate normality** assesses whether the data distribution satisfies the multivariate normality assumption underlying the GMM clustering applied later (Section 5.4).
+
+```{r kmo-bartlett}
+kmo_result     <- KMO(cor_mat_ref)
+bartlett_result <- cortest.bartlett(cor_mat_ref, n = nrow(df_ref))
+
+cat("KMO overall MSA:", round(kmo_result$MSA, 3), "\n")
+cat("Bartlett's test: chi-sq =", round(bartlett_result$chisq, 1),
+    ", df =", bartlett_result$df,
+    ", p =", format.pval(bartlett_result$p.value, digits = 3), "\n")
+```
+
+```{r mardia-test}
+# Mardia's test for multivariate normality (relevant for GMM assumptions)
+mardia_res <- MVN::mvn(df_ref[, analysis_vars], mvn_test = "mardia")
+mardia_res$multivariate_normality |>
+  kable(caption = "Mardia's Test of Multivariate Normality (reference-year cross-section)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+Both KMO and Bartlett's tests should confirm strong suitability. The globally correlated nature of development indicators (education, income, R&D, internet, employment structure) typically produces KMO values well above 0.8 in samples of this kind. Mardia's test is reported for transparency — multivariate normality is rarely satisfied in real-world economic data, and GMMs are known to be reasonably robust to moderate departures (Fraley & Raftery 2002).
+
+## 4.2 PCA Computation
+
+```{r pca-compute}
+# PCA on the reference-year cross-section (one row per country).
+# ncp set to the full number of variables to ensure no components are truncated.
+pca_res <- PCA(df_ref[, analysis_vars], scale.unit = TRUE,
+               ncp = length(analysis_vars), graph = FALSE)
+
+eig_tbl <- get_eigenvalue(pca_res) |>
+  as.data.frame() |>
+  rownames_to_column("PC") |>
+  as_tibble()
+
+eig_tbl |>
+  kable(digits = 2,
+        col.names = c("Component", "Eigenvalue", "% Variance", "Cumulative %"),
+        caption = "PCA Eigenvalues — Full Decomposition (reference-year cross-section)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 4.3 Scree Plot & Parallel Analysis
+
+The scree plot visualises eigenvalues in descending order. We apply two complementary retention rules:
+
+1. The **Kaiser criterion** (retain all components with eigenvalue $\geq 1$, shown as the red dashed line): a component must capture more variance than any single original standardised variable to be worth retaining.
+2. **Horn's Parallel Analysis** (1965): compares observed eigenvalues against eigenvalues from 5,000 random datasets of the same dimensions. Components are retained only if their observed eigenvalue exceeds the 95th percentile of the random distribution — a more stringent and widely recommended criterion than Kaiser alone (Hayton, Allen & Scarpello 2004).
+
+```{r scree, fig.height=5}
+ggplot(eig_tbl, aes(x = seq_len(nrow(eig_tbl)), y = eigenvalue)) +
+  geom_col(fill = "steelblue", alpha = 0.8) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "red", linewidth = 0.8) +
+  geom_text(aes(label = paste0(round(variance.percent, 1), "%")),
+            vjust = -0.5, size = 3.2) +
+  scale_x_continuous(breaks = seq_len(nrow(eig_tbl)),
+                     labels = paste0("PC", seq_len(nrow(eig_tbl)))) +
+  labs(title = "Scree Plot with Kaiser Criterion (eigenvalue = 1)",
+       x = "Principal Component", y = "Eigenvalue") +
+  theme_minimal()
+
+n_retain <- sum(eig_tbl$eigenvalue >= 1)
+cum_var  <- eig_tbl$cumulative.variance.percent[n_retain]
+cat("Components retained (Kaiser criterion):", n_retain,
+    "| Cumulative variance:", round(cum_var, 1), "%\n")
+```
+
+```{r parallel-analysis, fig.height=5}
+# Horn's Parallel Analysis — gold standard for PCA retention
+set.seed(123)
+pa_res <- psych::fa.parallel(df_ref[, analysis_vars], fa = "pc",
+                              n.iter = 5000, show.legend = TRUE,
+                              main = "Parallel Analysis — Observed vs Random Eigenvalues")
+
+n_retain_pa <- pa_res$ncomp
+cat("Parallel Analysis suggests retaining:", n_retain_pa, "components\n")
+cat("Kaiser criterion suggests retaining:", n_retain, "components\n")
+
+# Use the more conservative of the two if they differ
+if (n_retain_pa != n_retain) {
+  cat("Using Kaiser criterion (", n_retain, ") for downstream analysis;",
+      "Parallel Analysis (", n_retain_pa, ") noted for comparison.\n")
+}
+```
+
+By the **Kaiser criterion**, we retain **`r n_retain` components** explaining **`r round(cum_var, 1)`%** of total variance. Horn's Parallel Analysis `r if(n_retain_pa == n_retain) "independently confirms this choice" else paste0("suggests ", n_retain_pa, " components, which is noted as a sensitivity check")`.
+
+## 4.4 Loadings & Interpretation
+
+**Loadings** are the correlations between original variables and each principal component. High positive loadings indicate the variable increases with the component; high negative loadings indicate an inverse relationship. We report `$coord` from FactoMineR, which equals the variable-PC correlations in a standardised PCA (`scale.unit = TRUE`), providing directly interpretable factor loadings.
+
+```{r loadings}
+load_df <- get_pca_var(pca_res)$coord |>
+  as.data.frame() |>
+  rownames_to_column("Variable") |>
+  as_tibble()
+
+# Display loadings for retained components only
+load_df |>
+  select(Variable, all_of(paste0("Dim.", 1:min(n_retain, 5)))) |>
+  arrange(desc(abs(Dim.1))) |>
+  kable(digits = 3,
+        caption = "PCA Loadings: Variable–Component Correlations (retained components)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+**Interpretation of retained components (threshold: |loading| > 0.4):**
+
+Each component is given a substantive name based on its dominant loadings. The name reflects what "high" vs. "low" scores mean in terms of real economic structure.
+
+```{r interpret-pca, results='asis'}
+# Auto-assign a substantive name based on which variables dominate the component
+assign_pc_name <- function(pos_vars, neg_vars) {
+  all_vars <- c(pos_vars, neg_vars)
+  dev_vars   <- c("GDP_pc", "Internet_Users", "Tertiary_Edu", "RD_Intensity", "HiTech_Exports")
+  labor_vars <- c("Labor_Part", "Unemp_Total", "Unemp_Youth")
+  sector_vars <- c("Agric_Empl", "Industry_Empl")
+  dyn_vars   <- c("GDP_Growth")
+
+  if (length(intersect(dev_vars, all_vars)) >= 2)   return("Global Development & Digital Readiness")
+  if (length(intersect(labor_vars, all_vars)) >= 2) return("Labour Market Strain")
+  if (length(intersect(sector_vars, all_vars)) >= 1 && length(intersect(dyn_vars, all_vars)) >= 1)
+    return("Sectoral Composition & Economic Dynamism")
+  if ("GDP_Growth" %in% all_vars)                   return("Economic Dynamism")
+  if (length(intersect(sector_vars, all_vars)) >= 1) return("Sectoral Composition")
+  paste0("Component ", length(pos_vars) + length(neg_vars))
+}
+
+for (d in 1:min(n_retain, 3)) {
+  col     <- paste0("Dim.", d)
+  top_pos <- load_df |> filter(.data[[col]] >  0.4) |> arrange(desc(.data[[col]]))
+  top_neg <- load_df |> filter(.data[[col]] < -0.4) |> arrange(.data[[col]])
+
+  pc_label <- assign_pc_name(top_pos$Variable, top_neg$Variable)
+
+  cat(sprintf('\n**PC%d — "%s"** (%.1f%% variance explained)\n\n', d, pc_label,
+              eig_tbl$variance.percent[d]))
+  if (nrow(top_pos) > 0)
+    cat("- **High scores** (above-average):", paste(top_pos$Variable, collapse = ", "), "\n")
+  if (nrow(top_neg) > 0)
+    cat("- **Low scores** (below-average):", paste(top_neg$Variable, collapse = ", "), "\n")
+  cat("\n")
+}
+```
+
+In global cross-country data, the dominant first component almost invariably captures the **global development axis** —a single underlying dimension that reflects the deep co-movement of income, education, R&D, digital infrastructure, and sectoral composition. Countries scoring high on PC1 tend to be wealthy, educated, R&D-intensive, digitally connected, and have small agricultural sectors; those scoring low show the opposite profile.
+
+## 4.5 Variable Contributions
+
+**Contributions** measure the magnitude of each variable's role in defining each component, expressed as a percentage. The red dashed reference line marks the expected contribution if all variables contributed equally (100% ÷ number of variables).
+
+```{r var-contrib, fig.height=6}
+fviz_contrib(pca_res, choice = "var", axes = 1, top = length(analysis_vars),
+             title = "Variable Contributions to PC1") +
+  theme_minimal()
+```
+
+```{r var-contrib-2, fig.height=6}
+fviz_contrib(pca_res, choice = "var", axes = 2, top = length(analysis_vars),
+             title = "Variable Contributions to PC2") +
+  theme_minimal()
+```
+
+## 4.6 PCA Variable Map (cos²)
+
+The variable map projects original variables onto the first two principal components. Variables appearing close together are positively correlated; those on opposite sides of the origin are negatively correlated; those at right angles are uncorrelated. The colour gradient represents $\cos^2$ —the quality of each variable's representation in this 2D plane.
+
+```{r pca-var-map, fig.height=7}
+fviz_pca_var(pca_res, col.var = "cos2", repel = TRUE,
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             title = "PCA Variable Map —coloured by cos² (quality of 2D representation)")
+```
+
+## 4.7 Biplot —Country Positions Coloured by Development Tier
+
+This biplot projects each country's structural profile onto PC1–PC2. Points are coloured by World Bank income tier, allowing us to see immediately whether the data-driven PCA dimensions align with the conventional development hierarchy. If PCA has successfully captured the global development axis in PC1, we would expect a clear left-to-right gradient from Low-Income to High-Income countries.
+
+```{r biplot, fig.height=8, fig.width=10}
+# PCA scores are already for the reference-year cross-section (df_ref)
+ind_scores <- as_tibble(pca_res$ind$coord[, 1:min(n_retain, 5)])
+names(ind_scores) <- paste0("PC", seq_along(ind_scores))
+ind_scores$row_id <- seq_len(nrow(ind_scores))
+
+df_pca <- df_ref |>
+  mutate(row_id = row_number()) |>
+  left_join(ind_scores, by = "row_id") |>
+  select(-row_id)
+
+ggplot(df_pca, aes(PC1, PC2, colour = Development_Tier, label = iso3c)) +
+  geom_point(size = 3, alpha = 0.85) +
+  geom_text_repel(size = 2.8, max.overlaps = 30) +
+  scale_colour_manual(values = tier_pal) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5) +
+  labs(
+    title = paste0("PCA Biplot — Country Positions (", REF_YEAR, ")"),
+    subtitle = "Coloured by World Bank Income Group",
+    x = sprintf("PC1 (%.1f%%)", eig_tbl$variance.percent[1]),
+    y = sprintf("PC2 (%.1f%%)", eig_tbl$variance.percent[2]),
+    colour = "Development Tier"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## 4.8 Representation Quality (cos²)
+
+The $\cos^2$ statistic measures how accurately each country's position in the 2D biplot represents its full multi-dimensional profile. Values below 0.5 (shown in red) indicate that important aspects of that country's economy are captured by higher-order components, and the 2D position may be misleading.
+
+```{r cos2, fig.height=9}
+ind_cos2 <- get_pca_ind(pca_res)$cos2 |>
+  as.data.frame() |>
+  mutate(cos2_12 = Dim.1 + Dim.2, row_id = row_number())
+
+df_cos2 <- df_ref |>
+  mutate(row_id = row_number()) |>
+  left_join(ind_cos2 |> select(row_id, cos2_12), by = "row_id") |>
+  arrange(cos2_12) |>
+  mutate(bar_fill = if_else(cos2_12 > 0.5, "steelblue", "tomato"))
+
+ggplot(df_cos2, aes(reorder(iso3c, cos2_12), cos2_12, fill = bar_fill)) +
+  geom_col() +
+  scale_fill_identity() +
+  geom_hline(yintercept = 0.5, linetype = "dashed", colour = "red") +
+  coord_flip() +
+  labs(title = "cos² Quality of Representation on PC1–PC2",
+       subtitle = "Red bars: poorly represented in 2D (cos² < 0.5) — interpret biplot position with caution",
+       x = NULL, y = "cos² (PC1 + PC2)") +
+  theme_minimal()
+```
+
+------------------------------------------------------------------------
+
+# 5. Clustering
+
+With PCA complete, we now identify **groups** of countries that share similar structural profiles. While PCA revealed the main dimensions of global economic variation, clustering takes the next step: assigning countries to discrete, interpretable groups. We apply three fundamentally different clustering algorithms — **K-Means**, **Hierarchical (agglomerative)**, and **Model-Based (Gaussian Mixture)** — to exploit their complementary assumptions. Agreement across methods provides strong evidence that the groups are genuine features of the data.
+
+All clustering is performed in **PCA space** using all `r n_retain` retained components (those with eigenvalue ≥ 1, explaining `r round(cum_var, 1)`% of variance). Using the full retained set rather than an arbitrary cap ensures no meaningful structural dimension is discarded. Clustering in PCA space eliminates multicollinearity between correlated original features, reduces noise from uninformative minor components, and mitigates the curse of dimensionality — a phenomenon where Euclidean distances become uninformative as the number of raw dimensions grows.
+
+**Distance metric:** All three clustering methods use **Euclidean distance** in the standardised PCA score space. Scale sensitivity — the main pitfall of Euclidean distance on raw variables — is fully handled by the prior PCA standardisation step: every retained component has unit variance, so no single dimension can dominate the distance calculation.
+
+```{r cluster-data}
+# df_pca already contains only the reference-year cross-section (one row per country)
+# since PCA was fitted on df_ref.
+n_pcs <- n_retain  # use all Kaiser-retained components (no arbitrary cap)
+
+df_cluster <- df_pca   # already reference year only
+
+pca_space <- df_cluster |> select(all_of(paste0("PC", 1:n_pcs)))
+stopifnot(nrow(pca_space) == n_distinct(df_cluster$iso3c))  # one row per country
+```
+
+
+## 5.1 Optimal Number of Clusters ($k$)
+
+We determine $k$ using four independent methods and look for convergence.
+
+### Elbow Method (WSS)
+
+The elbow method plots total within-cluster sum of squares against $k$. The "elbow" — where improvement slows markedly — identifies the value of $k$ beyond which additional clusters explain diminishing additional variance.
+
+```{r elbow, fig.height=5}
+k_grid <- 2:8
+
+wss_tbl <- purrr::map_dfr(k_grid, \(k) {
+  set.seed(123)
+  km <- kmeans(pca_space, centers = k, nstart = 50)
+  tibble(k = k, WSS = km$tot.withinss)
+})
+
+ggplot(wss_tbl, aes(k, WSS)) +
+  geom_line(linewidth = 1) + geom_point(size = 3) +
+  labs(title = "Elbow Plot (Total Within-Cluster SS)", x = "k", y = "WSS") +
+  theme_minimal()
+```
+
+### Average Silhouette Width
+
+For each observation, the **silhouette coefficient** measures how similar it is to its own cluster versus the nearest alternative cluster. Values range from −1 (misclassified) to +1 (well-matched). The average across all observations is maximised at the optimal $k$.
+
+```{r silhouette-k, fig.height=5}
+sil_tbl <- purrr::map_dfr(k_grid, \(k) {
+  set.seed(123)
+  km <- kmeans(pca_space, centers = k, nstart = 50)
+  ss <- silhouette(km$cluster, dist(pca_space))
+  tibble(k = k, Avg_Silhouette = mean(ss[, "sil_width"]))
+})
+
+ggplot(sil_tbl, aes(k, Avg_Silhouette)) +
+  geom_line(linewidth = 1) + geom_point(size = 3) +
+  labs(title = "Average Silhouette Width by k", x = "k", y = "Avg Silhouette") +
+  theme_minimal()
+```
+
+### Gap Statistic
+
+The **Gap statistic** (Tibshirani, Walther & Hastie, 2001) compares the observed within-cluster variation against the expected variation under a null reference distribution (uniform data with no cluster structure). The optimal $k$ is the smallest value where the observed clustering is substantially tighter than random data. We use 100 bootstrap reference samples.
+
+```{r gap-stat, fig.height=5}
+gap_cache <- file.path("data", "gap_stat.rds")
+if (file.exists(gap_cache)) {
+  gap_res <- readRDS(gap_cache)
+  cat("Gap statistic loaded from disk cache.\n")
+} else {
+  set.seed(123)
+  gap_res <- clusGap(as.data.frame(pca_space), FUNcluster = kmeans,
+                     nstart = 50, K.max = 8, B = 100)
+  saveRDS(gap_res, gap_cache)
+}
+fviz_gap_stat(gap_res) +
+  labs(title = "Gap Statistic (100 bootstrap reference samples)") +
+  theme_minimal()
+```
+
+### NbClust Majority Vote
+
+**NbClust** evaluates 30 different statistical indices for clustering quality and conducts a majority vote on the optimal $k$. This ensemble approach is more robust than any single criterion.
+
+```{r nbclust, fig.height=5}
+nbclust_cache <- file.path("data", "nbclust.rds")
+if (file.exists(nbclust_cache)) {
+  nb <- readRDS(nbclust_cache)
+  cat("NbClust result loaded from disk cache.\n")
+} else {
+  set.seed(123)
+  # Suppress NbClust's internal cat() output and its auto-generated
+  # Hubert / D-index plots (which would appear as extra unsolicited figures)
+  pdf(nullfile())
+  invisible(capture.output(
+    nb <- NbClust(as.data.frame(pca_space), distance = "euclidean",
+                  min.nc = 2, max.nc = 8, method = "kmeans", index = "all")
+  ))
+  dev.off()
+  saveRDS(nb, nbclust_cache)
+}
+
+k_votes <- as.numeric(nb$Best.nc[1, ])
+k_votes <- k_votes[!is.na(k_votes) & k_votes >= 2 & k_votes <= 8]
+
+vote_tbl <- tibble(k = k_votes) |>
+  count(k, name = "Votes") |>
+  arrange(desc(Votes))
+
+ggplot(vote_tbl, aes(factor(k), Votes)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = Votes), vjust = -0.4) +
+  labs(title = "NbClust Majority Vote —Optimal k",
+       x = "k", y = "Number of indices voting") +
+  theme_minimal()
+```
+
+### Decision
+
+```{r k-decision}
+k_nb  <- vote_tbl |> slice_max(Votes, n = 1, with_ties = FALSE) |> pull(k)
+k_sil <- sil_tbl  |> slice_max(Avg_Silhouette, n = 1, with_ties = FALSE) |> pull(k)
+
+cat("NbClust majority vote: k =", k_nb, "\n")
+cat("Best silhouette: k =", k_sil, "\n")
+
+k_final <- k_nb
+cat("Selected k =", k_final, "\n")
+```
+
+We select **k = `r k_final`** based on the NbClust majority rule, consistent with the elbow and silhouette evidence. In a global sample with high-income, middle-income, and low-income countries, we expect the algorithm to identify clusters that broadly reflect these development tiers —though the unsupervised method may also reveal finer structural distinctions within tiers.
+
+## 5.2 K-Means Clustering
+
+**K-Means** partitions observations into $k$ spherical clusters by iteratively assigning observations to the nearest centroid and recomputing centroids as cluster means. We run with 100 random starting configurations (`nstart = 100`) to avoid local minima.
+
+```{r kmeans}
+
+
+set.seed(123)
+
+# safety: these must align row-by-row
+stopifnot(nrow(df_cluster) == nrow(pca_space))
+
+km_fit <- kmeans(pca_space, centers = k_final, nstart = 100)
+
+df_cluster <- df_cluster |>
+  dplyr::mutate(km_cluster = factor(km_fit$cluster))
+```
+
+```{r kmeans-plot, fig.height=7}
+fviz_cluster(km_fit, data = as.data.frame(pca_space),
+             ggtheme = theme_minimal(),
+             main = paste("K-Means Clusters (k =", k_final, ") in PCA Space"))
+```
+
+```{r silhouette-standard, fig.height=6}
+# Standard silhouette plot — canonical clustering diagnostic (Kaufman & Rousseeuw 1990)
+fviz_silhouette(silhouette(km_fit$cluster, dist(pca_space)),
+                main = paste("Silhouette Plot — K-Means (k =", k_final, ")")) +
+  theme_minimal()
+```
+
+```{r sanity-clustered}
+stopifnot(exists("df_cluster"))
+stopifnot("km_cluster" %in% names(df_cluster))
+cat("Clustered sample:", nrow(df_cluster), "rows,",
+    dplyr::n_distinct(df_cluster$iso3c), "countries.\n")
+print(dplyr::count(df_cluster, km_cluster))
+```
+
+
+### Cluster visualisation in PCA space (reference year)
+
+```{r cluster-pca-scatter, fig.height=6}
+ggplot(df_cluster, aes(PC1, PC2, colour = km_cluster, shape = Development_Tier, label = iso3c)) +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_text_repel(size = 2.6, max.overlaps = 30) +
+  labs(title = paste("K-means clusters in PCA space — reference year", REF_YEAR),
+       x = sprintf("PC1 (%.1f%%)", eig_tbl$variance.percent[1]),
+       y = sprintf("PC2 (%.1f%%)", eig_tbl$variance.percent[2]),
+       colour = "Cluster", shape = "Tier") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+### Cluster profiles in original variable space
+
+To interpret clusters substantively, we summarise each cluster by the mean **standardised** value (z-score) of each original indicator in the reference year. This directly answers: *what variables define each cluster?*
+
+```{r cluster-profiles}
+# Standardise within the reference-year cross-section for interpretation
+df_prof <- df_cluster |>
+  mutate(across(all_of(analysis_vars), z))
+
+profile_tbl <- df_prof |>
+  group_by(km_cluster) |>
+  summarise(across(all_of(analysis_vars), ~mean(.x, na.rm = TRUE)), .groups = "drop")
+
+profile_tbl |>
+  kable(digits = 2, caption = "Cluster profiles (mean z-scores) — higher = above-sample average") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+```{r cluster-profile-heatmap, fig.height=6}
+profile_long <- profile_tbl |>
+  pivot_longer(-km_cluster, names_to = "variable", values_to = "z_mean")
+
+ggplot(profile_long, aes(variable, km_cluster, fill = z_mean)) +
+  geom_tile(color = "white", linewidth = 0.3) +
+  scale_fill_gradient2(low = "tomato", mid = "white", high = "steelblue", midpoint = 0) +
+  labs(title = paste("Cluster profile heatmap (z-means) — reference year", REF_YEAR),
+       x = NULL, y = "K-means cluster", fill = "Mean z") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+### Per-Observation Silhouette
+
+```{r silhouette-obs, fig.height=6}
+sil_obs <- silhouette(km_fit$cluster, dist(pca_space))
+sil_df  <- as.data.frame(sil_obs[, 1:3])
+names(sil_df) <- c("cluster", "neighbor", "sil_width")
+sil_df$cluster <- factor(sil_df$cluster)
+
+# Summary stats per cluster
+sil_summary <- sil_df |>
+  group_by(cluster) |>
+  summarise(
+    n       = n(),
+    avg_sil = mean(sil_width),
+    neg_pct = mean(sil_width < 0) * 100,
+    .groups = "drop"
+  )
+
+overall_avg <- mean(sil_df$sil_width)
+cat("Overall average silhouette width:", round(overall_avg, 3), "\n")
+print(sil_summary)
+
+# Left panel: average silhouette per cluster
+p_bar <- ggplot(sil_summary, aes(cluster, avg_sil, fill = cluster)) +
+  geom_col(width = 0.55, alpha = 0.88) +
+  geom_hline(yintercept = overall_avg, linetype = "dashed",
+             colour = "red", linewidth = 0.8) +
+  geom_text(aes(label = sprintf("n = %d\navg = %.2f", n, avg_sil)),
+            vjust = -0.35, size = 3.6, fontface = "bold") +
+  annotate("text", x = -Inf, y = overall_avg,
+           label = sprintf("Overall = %.2f", overall_avg),
+           hjust = -0.1, vjust = -0.5, colour = "red", size = 3.2) +
+  scale_fill_viridis_d(option = "D") +
+  scale_y_continuous(limits = c(0, max(sil_summary$avg_sil) * 1.3),
+                     breaks = seq(0, 1, 0.1)) +
+  labs(title = "Average Silhouette Width by Cluster",
+       subtitle = "Red line = overall average | Higher = tighter, better-separated cluster",
+       x = "Cluster", y = "Avg Silhouette Width") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Right panel: within-cluster distribution of silhouette widths
+p_box <- ggplot(sil_df, aes(cluster, sil_width, fill = cluster)) +
+  geom_violin(alpha = 0.55, trim = TRUE) +
+  geom_boxplot(width = 0.18, outlier.size = 0.8, alpha = 0.85) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  scale_fill_viridis_d(option = "D") +
+  labs(title = "Silhouette Width Distribution Within Each Cluster",
+       subtitle = "Values below 0 indicate potentially misassigned observations",
+       x = "Cluster", y = "Silhouette Width") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+gridExtra::grid.arrange(p_bar, p_box, ncol = 2)
+```
+
+## 5.3 Hierarchical Clustering
+
+**Hierarchical agglomerative clustering** builds a tree-like structure (dendrogram) by iteratively merging the two closest clusters, starting from individual observations. The full merge history is then cut at $k$ = `r k_final` groups.
+
+We use **Ward's D2 linkage**, which minimises the total within-cluster variance at each merge step, producing compact clusters that are most comparable to the K-Means solution. Ward's D2 is the standard choice when comparing hierarchical results to K-Means, and it consistently produces clusters that are more interpretable and balanced than single or complete linkage in economic data.
+
+```{r hclust-methods}
+# Single hclust object with country-labelled rows for both dendrogram and assignments
+pca_mat <- df_cluster |>
+  select(iso3c, all_of(paste0("PC", 1:n_pcs))) |>
+  as.data.frame()
+rownames(pca_mat) <- pca_mat$iso3c
+pca_mat <- pca_mat[, -1, drop = FALSE]
+
+d <- dist(pca_mat, method = "euclidean")
+hc_ward <- hclust(d, method = "ward.D2")
+
+coph_cor <- round(cor(d, cophenetic(hc_ward)), 3)
+cat("Ward.D2 cophenetic correlation:", coph_cor, "\n")
+cat("Interpretation:", ifelse(coph_cor >= 0.75, "good — dendrogram faithfully represents distances (Sokal & Rohlf threshold: 0.75)",
+    "moderate — some distortion in dendrogram representation"), "\n")
+```
+
+### Dendrogram
+
+Height on the y-axis represents the distance at which clusters were merged. Large jumps indicate structural breaks in the data — points where merging is costly because genuinely dissimilar groups are being combined. The rectangles show the `r k_final` clusters obtained by cutting the tree.
+
+```{r dendrogram, fig.height=7, fig.width=14}
+dend <- as.dendrogram(hc_ward) |>
+  set("labels_cex", 0.55) |>
+  color_branches(k = k_final)
+
+plot(dend,
+     main = paste("Hierarchical Dendrogram (Ward.D2) — Reference Year", REF_YEAR, "| k =", k_final),
+     ylab = "Height")
+rect.hclust(hc_ward, k = k_final, border = 2:(k_final + 1))
+```
+
+```{r hclust-assign}
+hc_clusters  <- cutree(hc_ward, k = k_final)
+df_cluster$hc_cluster <- factor(hc_clusters)
+```
+
+### Linkage Sensitivity Check
+
+To verify that Ward.D2's cluster assignments are not an artefact of the specific linkage rule, we compare the Ward solution against average and complete linkage using ARI. High agreement indicates that the cluster structure is an intrinsic feature of the data, not a function of the linkage criterion. (item 23)
+
+```{r linkage-sensitivity}
+hc_avg  <- hclust(d, method = "average")
+hc_comp <- hclust(d, method = "complete")
+
+cl_ward <- cutree(hc_ward, k = k_final)
+cl_avg  <- cutree(hc_avg,  k = k_final)
+cl_comp <- cutree(hc_comp, k = k_final)
+
+ari_ward_avg  <- adjustedRandIndex(cl_ward, cl_avg)
+ari_ward_comp <- adjustedRandIndex(cl_ward, cl_comp)
+
+tibble(
+  Comparison     = c("Ward.D2 vs Average", "Ward.D2 vs Complete"),
+  ARI            = c(ari_ward_avg, ari_ward_comp),
+  Interpretation = case_when(
+    ARI >= 0.90 ~ "Near-identical",
+    ARI >= 0.75 ~ "Strong agreement",
+    ARI >= 0.60 ~ "Moderate agreement",
+    TRUE        ~ "Substantial divergence"
+  )
+) |>
+  kable(digits = 3,
+        caption = "Hierarchical Clustering: Ward.D2 vs Alternative Linkages") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 5.4 Model-Based Clustering (Gaussian Mixture)
+
+**Gaussian Mixture Models (GMMs)** assume the data is generated by a mixture of multivariate normal distributions, each corresponding to a cluster. The Bayesian Information Criterion (BIC) simultaneously selects the optimal number of clusters and the best covariance model (spherical, ellipsoidal, equal/varying size and orientation). GMMs additionally provide **soft classification** — each observation receives a probability of belonging to each cluster, along with an uncertainty score. Mardia's test (Section 4.1) assesses the multivariate normality assumption underlying this method.
+
+```{r mclust, fig.height=6}
+mc_fit <- Mclust(as.data.frame(pca_space))
+
+cat("Best GMM model:", mc_fit$modelName,
+    "| k =", mc_fit$G,
+    "| BIC =", round(mc_fit$bic, 1), "\n")
+
+plot(mc_fit, what = "BIC",
+     main = "BIC by Model Type and Number of Components")
+```
+
+```{r mclust-plot, fig.height=7}
+plot(mc_fit, what = "classification",
+     main = paste("Model-Based Clusters (", mc_fit$modelName, ", k =", mc_fit$G, ")"))
+```
+
+```{r mclust-assign}
+df_cluster$mc_cluster   <- factor(mc_fit$classification)
+df_cluster$mc_uncertainty <- mc_fit$uncertainty
+
+cat("Observations with classification uncertainty > 0.1:",
+    sum(mc_fit$uncertainty > 0.1), "of", nrow(pca_space), "\n")
+```
+
+```{r make-df_clustered}
+# Create df_clustered AFTER all three clustering methods have been applied
+# so it contains km_cluster, hc_cluster, and mc_cluster
+df_clustered <- df_cluster
+stopifnot(all(c("km_cluster", "hc_cluster", "mc_cluster") %in% names(df_clustered)))
+```
+
+**Note on $k$:** The GMM selected **`r mc_fit$G` clusters** with a `r mc_fit$modelName` covariance structure via BIC. `r if (mc_fit$G == k_final) "This independently confirms our NbClust-based selection —the GMM's data-driven model selection agrees with the majority vote." else paste0("This differs from the K-Means/hierarchical k = ", k_final, ", reflecting the GMM's greater flexibility in accommodating non-spherical cluster shapes. The cross-method comparison below uses each method's own cluster labels.")`
+
+## 5.5 Method Comparison
+
+High agreement across three very different algorithms —K-Means (distance-based, spherical), Hierarchical (tree-based, Ward linkage), and GMM (probabilistic, flexible covariance) —is a strong signal that the cluster structure reflects genuine patterns in the data. We quantify agreement using the **Adjusted Rand Index (ARI)**, which measures pairwise agreement between clusterings corrected for chance. ARI = 1.0 indicates perfect agreement; ARI = 0 indicates chance-level agreement.
+
+```{r cross-tab}
+cross_km_hc <- table(KMeans = df_cluster$km_cluster, Hierarchical = df_cluster$hc_cluster)
+cross_km_mc <- table(KMeans = df_cluster$km_cluster, ModelBased   = df_cluster$mc_cluster)
+
+cat("K-Means vs Hierarchical:\n"); print(cross_km_hc)
+cat("\nK-Means vs Model-Based:\n");  print(cross_km_mc)
+```
+
+```{r ari-comparison}
+ari_km_hc <- adjustedRandIndex(df_cluster$km_cluster, df_cluster$hc_cluster)
+ari_km_mc <- adjustedRandIndex(df_cluster$km_cluster, df_cluster$mc_cluster)
+ari_hc_mc <- adjustedRandIndex(df_cluster$hc_cluster, df_cluster$mc_cluster)
+
+tibble(
+  Pair = c("K-Means vs Hierarchical",
+           "K-Means vs Model-Based",
+           "Hierarchical vs Model-Based"),
+  ARI  = c(ari_km_hc, ari_km_mc, ari_hc_mc)
+) |>
+  kable(digits = 3,
+        caption = "Adjusted Rand Index: Cross-Method Agreement (ARI > 0.8 = strong; > 0.65 = moderate)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+### Alluvial Diagram: Country Flow Across Methods
+
+The alluvial diagram below visualises how individual countries are assigned by each of the three clustering methods. Thick, unbroken flows indicate consensus; fragmented flows reveal countries where methods disagree — the structural "borderline" cases.
+
+```{r alluvial, fig.height=7, fig.width=10}
+alluvial_df <- df_cluster |>
+  select(iso3c, km_cluster, hc_cluster, mc_cluster) |>
+  rename(`K-Means` = km_cluster, Hierarchical = hc_cluster, `GMM` = mc_cluster) |>
+  pivot_longer(-iso3c, names_to = "Method", values_to = "Cluster") |>
+  mutate(Method = factor(Method, levels = c("K-Means", "Hierarchical", "GMM")))
+
+ggplot(alluvial_df,
+       aes(x = Method, stratum = Cluster, alluvium = iso3c, fill = Cluster)) +
+  geom_flow(alpha = 0.4) +
+  geom_stratum(alpha = 0.8) +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)), size = 3.5) +
+  scale_fill_viridis_d(option = "D") +
+  labs(title = "Country Assignment Flow Across Three Clustering Methods",
+       subtitle = "Each ribbon tracks one country across methods; fragmented flows = borderline cases",
+       x = NULL, y = "Count") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Stability under resampling (subsample ARI)
+
+A good clustering should be reasonably stable to modest perturbations of the sample. We subsample countries (without replacement), refit k-means, then compare the induced partition on the overlapping countries to the original solution using ARI.
+
+```{r cluster-stability, fig.height=5, echo=FALSE, message=FALSE, warning=FALSE}
+
+set.seed(123)
+B <- 50
+keep_frac <- 0.8
+
+orig_assign <- df_cluster |> dplyr::select(iso3c, km_cluster)
+
+ari_boot <- purrr::map_dbl(seq_len(B), function(b) {
+  keep <- sample(df_cluster$iso3c,
+                 size = floor(keep_frac * nrow(df_cluster)),
+                 replace = FALSE)
+
+  df_b  <- df_cluster |> dplyr::filter(iso3c %in% keep)
+  pca_b <- df_b |> dplyr::select(dplyr::all_of(paste0("PC", 1:n_pcs)))
+
+  km_b  <- kmeans(pca_b, centers = k_final, nstart = 50)
+  ass_b <- tibble(iso3c = df_b$iso3c, km_b = factor(km_b$cluster))
+
+  joined <- dplyr::inner_join(orig_assign, ass_b, by = "iso3c")
+  mclust::adjustedRandIndex(joined$km_cluster, joined$km_b)
+})
+
+ari_df <- tibble(ARI = ari_boot)
+
+mu  <- mean(ari_boot, na.rm = TRUE)
+med <- median(ari_boot, na.rm = TRUE)
+p10 <- as.numeric(stats::quantile(ari_boot, 0.10, na.rm = TRUE))
+p90 <- as.numeric(stats::quantile(ari_boot, 0.90, na.rm = TRUE))
+
+# Colorblind-safe palette (Okabe–Ito)
+col_hist <- "#4D4D4D"   # neutral dark grey
+col_den  <- "#0072B2"   # blue
+col_mean <- "#D55E00"   # vermillion
+col_med  <- "#009E73"   # bluish green
+band_weak <- "#D55E00"  # weak (warm)
+band_mod  <- "#E69F00"  # moderate (amber)
+band_str  <- "#009E73"  # strong (green)
+
+ggplot(ari_df, aes(ARI)) +
+  # interpretation bands (now colored, but subtle + accessible)
+  annotate("rect", xmin = -Inf, xmax = 0.75, ymin = -Inf, ymax = Inf,
+           fill = band_weak, alpha = 0.08) +
+  annotate("rect", xmin = 0.75, xmax = 0.90, ymin = -Inf, ymax = Inf,
+           fill = band_mod, alpha = 0.07) +
+  annotate("rect", xmin = 0.90, xmax = Inf, ymin = -Inf, ymax = Inf,
+           fill = band_str, alpha = 0.06) +
+
+  geom_histogram(bins = 18, boundary = 0, closed = "left",
+                 fill = col_hist, colour = "white", linewidth = 0.4, alpha = 0.90) +
+  geom_density(colour = col_den, linewidth = 1.1, adjust = 1.1) +
+  geom_rug(colour = col_hist, alpha = 0.18) +
+
+  geom_vline(xintercept = mu,  linetype = "dashed",  colour = col_mean, linewidth = 1.0) +
+  geom_vline(xintercept = med, linetype = "dotdash", colour = col_med,  linewidth = 1.0) +
+
+  annotate(
+    "label",
+    x = 0.55, y = Inf, hjust = 0, vjust = 1.15,
+    label = sprintf(
+      "B=%d, keep=%.0f%%\nMean=%.3f | Median=%.3f\n10–90%%: %.3f–%.3f",
+      B, keep_frac*100, mu, med, p10, p90
+    ),
+    label.size = 0.25,
+    fill = "white",
+    colour = "black"
+  ) +
+
+  scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
+  labs(
+    title = "K-means stability under 80% subsampling (ARI distribution)",
+    subtitle = "Bands: weak (<0.75), moderate (0.75–0.90), strong (≥0.90). Dashed=mean, dotdash=median.",
+    x = "Adjusted Rand Index vs original clustering",
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title.position = "plot"
+  )
+
+stability_label <- ifelse(mu >= 0.90, "highly stable",
+                          ifelse(mu >= 0.75, "moderately stable", "unstable"))
+knitr::asis_output(sprintf(
+  "<div class='callout callout-info'><strong>Subsample stability:</strong> mean ARI = %.3f (median %.3f), 10–90%% range %.3f–%.3f — clustering is <strong>%s</strong> under 80%% subsampling.</div>",
+  mu, med, p10, p90, stability_label
+))
+```
+
+
+## 5.6 Cluster Stability (K-Means)
+
+We re-run K-Means with five different random seeds and compute ARI between every pair of resulting clusterings. ARI = 1.0 across all pairs indicates that the cluster assignments are perfectly reproducible regardless of initialisation.
+
+```{r stability}
+seeds <- c(1, 7, 42, 99, 202)
+cl_list <- purrr::map(seeds, \(s) {
+  set.seed(s); kmeans(pca_space, k_final, nstart = 100)$cluster
+})
+
+ari_stability <- expand_grid(i = seq_along(seeds), j = seq_along(seeds)) |>
+  filter(i < j) |>
+  mutate(ARI = purrr::map2_dbl(i, j,
+                                \(a, b) adjustedRandIndex(cl_list[[a]], cl_list[[b]])))
+
+seed_ari_min <- round(min(ari_stability$ARI), 3)
+seed_ari_max <- round(max(ari_stability$ARI), 3)
+seed_label   <- ifelse(seed_ari_min >= 0.99, "perfectly stable",
+                       ifelse(seed_ari_min >= 0.85, "highly stable", "moderately stable"))
+knitr::asis_output(sprintf(
+  "<div class='callout callout-info'><strong>Seed stability:</strong> ARI range %.3f–%.3f across 5 random initialisations — assignments are <strong>%s</strong> and not an artefact of initialisation.</div>",
+  seed_ari_min, seed_ari_max, seed_label
+))
+```
+
+### PCA-Space vs. Raw-Variable Clustering Comparison
+
+A key methodological question: does clustering in PCA space produce meaningfully different results from clustering on the raw (scaled) variables? If the two approaches agree strongly, PCA-based clustering is validated as a dimensionality reduction step that preserves the clustering signal. If they diverge, important structure may be lost in the PCA projection.
+
+```{r pca-vs-raw}
+# Cluster on raw scaled variables (same k, same algorithm)
+raw_scaled <- scale(df_cluster[, analysis_vars])
+set.seed(42)
+km_raw <- kmeans(raw_scaled, centers = k_final, nstart = 100)
+
+# Compare with PCA-based clustering
+ari_pca_raw <- adjustedRandIndex(km_fit$cluster, km_raw$cluster)
+
+# Silhouette comparison
+sil_pca <- mean(silhouette(km_fit$cluster, dist(pca_space))[, "sil_width"])
+sil_raw <- mean(silhouette(km_raw$cluster, dist(raw_scaled))[, "sil_width"])
+
+tibble(
+  Metric = c("ARI (PCA vs. raw)", "Mean silhouette (PCA space)", "Mean silhouette (raw space)"),
+  Value = c(round(ari_pca_raw, 3), round(sil_pca, 3), round(sil_raw, 3))
+) |>
+  kable(caption = "PCA-Space vs. Raw-Variable Clustering Comparison") |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+ari_label <- ifelse(ari_pca_raw >= 0.90, "near-identical",
+             ifelse(ari_pca_raw >= 0.75, "strongly similar",
+             ifelse(ari_pca_raw >= 0.50, "moderately similar", "notably different")))
+```
+
+<div class="callout callout-info">
+**PCA vs. raw clustering:** ARI = `r round(ari_pca_raw, 3)` — the two approaches produce `r ari_label` partitions. `r if(sil_pca >= sil_raw) "PCA-space clustering achieves equal or higher silhouette, confirming that dimensionality reduction preserves (or sharpens) the clustering signal." else "Raw-space clustering achieves marginally higher silhouette, suggesting that some separating variance resides in minor PCA components. The practical difference is small."`
+</div>
+
+## 5.7 Cluster Profiles
+
+We profile each cluster on the original (unstandardised) analysis variables and their z-scored means. Positive z-scores indicate the cluster is above the global average on that variable; negative z-scores indicate below.
+
+```{r profiles-z}
+
+
+stopifnot("km_cluster" %in% names(df_cluster))
+
+cluster_z <- df_cluster |>
+  dplyr::select(km_cluster, dplyr::all_of(analysis_vars)) |>
+  dplyr::mutate(dplyr::across(-km_cluster, z)) |>
+  dplyr::group_by(km_cluster) |>
+  dplyr::summarise(dplyr::across(dplyr::everything(), ~ mean(.x, na.rm = TRUE)),
+                   .groups = "drop")
+
+cluster_z |>
+  kable(digits = 2,
+        caption = "Cluster Profiles (z-scored means; positive = above sample average)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+```
+
+```{r profiles-raw}
+
+if (!("km_cluster" %in% names(df_cluster))) {
+  stop("km_cluster not found in df_cluster. Ensure the {r kmeans} chunk ran before this chunk.", call. = FALSE)
+}
+
+cluster_raw <- df_cluster |>
+  dplyr::group_by(km_cluster) |>
+  dplyr::summarise(
+    dplyr::across(dplyr::all_of(analysis_vars), ~ mean(.x, na.rm = TRUE)),
+    n = dplyr::n(),
+    n_countries = dplyr::n_distinct(iso3c),
+    .groups = "drop"
+  )
+
+cluster_raw |>
+  kable(digits = 2, caption = "Cluster Profiles (raw means, reference-year sample)") |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### Radar Chart
+
+```{r radar, fig.height=7, fig.width=9}
+radar_data <- cluster_z |>
+  pivot_longer(-km_cluster, names_to = "Variable", values_to = "z_score")
+
+ggplot(radar_data, aes(x = Variable, y = z_score,
+                        group = km_cluster, colour = km_cluster, fill = km_cluster)) +
+  geom_polygon(alpha = 0.15, linewidth = 1) +
+  geom_point(size = 2.5) +
+  coord_polar() +
+  scale_colour_viridis_d(option = "D", name = "Cluster") +
+  scale_fill_viridis_d(option = "D", name = "Cluster") +
+  labs(title = "Cluster Profiles —z-scored Mean on Each Analysis Variable",
+       x = NULL, y = "z-score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 7))
+```
+
+### Boxplots by Cluster
+
+```{r boxplots, fig.height=11}
+
+df_clustered |>
+  dplyr::select(km_cluster, dplyr::all_of(analysis_vars)) |>
+  tidyr::pivot_longer(-km_cluster, names_to = "Variable", values_to = "Value") |>
+  ggplot2::ggplot(ggplot2::aes(km_cluster, Value, fill = km_cluster)) +
+  ggplot2::geom_boxplot(alpha = 0.7) +
+  ggplot2::facet_wrap(~ Variable, scales = "free_y", ncol = 3) +
+  ggplot2::labs(title = "Variable Distributions by Cluster (reference-year sample)",
+                x = "Cluster", fill = "Cluster") +
+  ggplot2::theme_minimal()
+```
+
+### Parallel Coordinates Plot
+
+Parallel coordinates display each country as a line traversing all eleven analysis variables (z-scored), coloured by cluster assignment. This reveals which variables most sharply separate clusters and exposes individual countries whose profiles deviate from their cluster's central tendency.
+
+```{r parallel-coords, fig.height=8, fig.width=12}
+pc_df <- df_clustered |>
+  mutate(across(all_of(analysis_vars), z)) |>
+  select(iso3c, km_cluster, all_of(analysis_vars)) |>
+  pivot_longer(cols = all_of(analysis_vars), names_to = "Variable", values_to = "z_value")
+
+ggplot(pc_df, aes(x = Variable, y = z_value, group = iso3c, colour = km_cluster)) +
+  geom_line(alpha = 0.35, linewidth = 0.4) +
+  stat_summary(aes(group = km_cluster), fun = mean, geom = "line",
+               linewidth = 1.4, alpha = 1) +
+  stat_summary(aes(group = km_cluster), fun = mean, geom = "point",
+               size = 2.5, alpha = 1) +
+  scale_colour_viridis_d(option = "D", name = "Cluster") +
+  labs(title = "Parallel Coordinates — All Analysis Variables by Cluster",
+       subtitle = "Thin lines = individual countries; thick lines = cluster means (z-scored)",
+       x = NULL, y = "z-score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        legend.position = "bottom")
+```
+
+### Prototype Countries (Closest to Cluster Centroids)
+
+For each cluster, the five countries with the shortest Euclidean distance to their cluster centroid in PCA space are the most representative members — the structural "archetypes" of that group. (item 25)
+
+```{r prototypes}
+# Compute cluster centroids in PCA space
+centroids <- as.data.frame(pca_space) |>
+  mutate(cluster = km_fit$cluster) |>
+  group_by(cluster) |>
+  summarise(across(everything(), mean), .groups = "drop")
+
+proto_df <- purrr::map_dfr(sort(unique(km_fit$cluster)), function(cl) {
+  cl_idx    <- which(km_fit$cluster == cl)
+  cl_data   <- as.matrix(pca_space[cl_idx, ])
+  centroid  <- centroids |> filter(cluster == cl) |> select(-cluster) |> as.numeric()
+  dists     <- apply(cl_data, 1, function(r) sqrt(sum((r - centroid)^2)))
+  top_idx   <- cl_idx[order(dists)[seq_len(min(5, length(cl_idx)))]]
+  df_cluster[top_idx, c("iso3c", "country", "Development_Tier")] |>
+    mutate(Cluster = cl, Dist_to_Centroid = sort(dists)[seq_len(min(5, length(cl_idx)))])
+})
+
+proto_df |>
+  arrange(Cluster, Dist_to_Centroid) |>
+  kable(digits = 3,
+        col.names = c("ISO3", "Country", "Tier", "Cluster", "Distance to Centroid"),
+        caption = "Five Prototype Countries Per Cluster (Closest to Centroid in PCA Space)") |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE) |>
+  collapse_rows(columns = 4, valign = "top")
+```
+
+### Cluster Composition by Development Tier
+
+A critical output for this global analysis: to what extent do the data-driven clusters align with the World Bank income classification? High alignment confirms that our unsupervised method has recovered the global development hierarchy; systematic divergence would reveal finer structural distinctions beyond what income level alone captures.
+
+```{r cluster-tier-tab}
+
+cluster_tier <- df_clustered |>
+  dplyr::count(km_cluster, Development_Tier) |>
+  tidyr::pivot_wider(names_from = Development_Tier, values_from = n, values_fill = 0L)
+
+cluster_tier |>
+  kable(caption = paste0("Cluster Composition by Development Tier (Reference Year: ", REF_YEAR, ")")) |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+
+```{r cluster-tier-plotv, fig.height=5 }
+
+tier_pct <- df_clustered |>
+  dplyr::mutate(km_cluster = factor(km_cluster, levels = sort(unique(km_cluster)))) |>
+  dplyr::count(km_cluster, Development_Tier, name = "n") |>
+  dplyr::group_by(km_cluster) |>
+  dplyr::mutate(pct = n / sum(n)) |>
+  dplyr::ungroup() |>
+  dplyr::mutate(
+    Development_Tier = factor(
+      Development_Tier,
+      levels = c("Advanced Economies", "Emerging Economies", "Developing Economies")
+    )
+  )
+
+ggplot(tier_pct, aes(km_cluster, pct, fill = Development_Tier)) +
+  geom_col(width = 0.62, alpha = 0.92) +
+  geom_text(
+    aes(label = ifelse(pct >= 0.06, sprintf("%d\n(%.0f%%)", n, pct * 100), "")),
+    position = position_stack(vjust = 0.5),
+    size = 3.4, fontface = "bold", colour = "white", lineheight = 0.95
+  ) +
+  scale_fill_manual(values = tier_pal, drop = FALSE) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+  labs(
+    title    = paste0("Development Tier Composition Within Each Cluster (", REF_YEAR, ")"),
+    subtitle = "Labels show country count and share of cluster; segments < 6% unlabelled",
+    x = "Cluster", y = "Share of cluster", fill = "Development tier"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title.position = "plot"
+  )
+```
+
+
+```{r tier-cluster-test, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+
+tab <- df_clustered |>
+  dplyr::count(km_cluster, Development_Tier) |>
+  tidyr::pivot_wider(names_from = Development_Tier, values_from = n, values_fill = 0) |>
+  tibble::column_to_rownames("km_cluster") |>
+  as.matrix()
+
+# Fisher’s exact test (robust to low expected cell counts in small contingency tables)
+fisher_res <- fisher.test(tab, simulate.p.value = TRUE, B = 10000)
+
+# Also compute Cramér’s V effect size (0–1)
+chi <- chisq.test(tab)
+n_tot <- sum(tab)
+k_min <- min(nrow(tab) - 1, ncol(tab) - 1)
+cramers_v <- sqrt(as.numeric(chi$statistic) / (n_tot * k_min))
+
+knitr::asis_output(sprintf(
+  "<div class=’callout callout-info’><strong>Association test:</strong> Fisher’s exact p=%s (10,000 simulations); Cramér’s V=%.2f.</div>",
+  format.pval(fisher_res$p.value, digits=3), cramers_v
+))
+```
+
+
+## 5.8 External Validation: Oxford AI Readiness Index (All Pillars)
+
+The Kaggle automation rates and Oxford Insights scores were excluded from the PCA/clustering pipeline (Section 3.3). We now use them as **independent external validators**: if our structurally derived clusters show meaningful differentiation on these AI-specific metrics, it confirms that the clusters capture genuine differences in AI preparedness — not artefacts of variable selection.
+
+The Oxford Insights index is a 2025 cross-section. It is used here as a **slow-moving institutional capacity proxy** rather than a time-matched observation — government digital readiness, infrastructure, and policy capacity evolve on decade-long timescales, so the 2025 scores are informative for clusters defined at the reference year.
+
+```{r external-validation-kaggle}
+# Kaggle synthetic metrics (illustrative only)
+# Pull from the merged panel (all_data) since df_pca is now cross-section only
+kaggle_ref <- all_data |>
+  dplyr::filter(year == REF_YEAR) |>
+  dplyr::select(iso3c, automation_rate, ai_readiness_score)
+
+kaggle_val <- df_clustered |>
+  dplyr::select(iso3c, country, km_cluster, Development_Tier) |>
+  dplyr::left_join(kaggle_ref, by = "iso3c") |>
+  dplyr::filter(!is.na(automation_rate) | !is.na(ai_readiness_score))
+
+if (nrow(kaggle_val) > 0) {
+  kaggle_val |>
+    dplyr::group_by(km_cluster) |>
+    dplyr::summarise(
+      n = dplyr::n(),
+      Automation_Rate    = mean(automation_rate,    na.rm = TRUE),
+      AI_Readiness_Score = mean(ai_readiness_score, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
+    kable(digits = 2,
+          col.names = c("Cluster", "n", "Automation Rate (%)", "AI Readiness (Kaggle, synthetic)"),
+          caption = paste0("External Validation: Kaggle Synthetic AI Metrics by Cluster (", REF_YEAR, ")")) |>
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+} else {
+  cat("Kaggle data not available for the reference year — skipped.\n")
+}
+```
+
+```{r external-validation-oxford}
+# Oxford AI Readiness — all available pillars (item 26)
+ox_pillar_cols <- intersect(
+  c("overall_score", "policy_capacity", "ai_infrastructure",
+    "governance", "public_sector_adoption", "development_diffusion", "resilience"),
+  names(ai_readiness)
+)
+
+oxford_val <- df_clustered |>
+  dplyr::select(iso3c, country, km_cluster, Development_Tier) |>
+  dplyr::left_join(ai_readiness |> dplyr::select(iso3c, dplyr::all_of(ox_pillar_cols)),
+                   by = "iso3c")
+
+if (length(ox_pillar_cols) > 0 && any(!is.na(oxford_val$overall_score))) {
+
+  # Table: cluster means across all pillars
+  oxford_val |>
+    dplyr::group_by(km_cluster) |>
+    dplyr::summarise(
+      n = dplyr::n(),
+      dplyr::across(dplyr::all_of(ox_pillar_cols), ~ mean(.x, na.rm = TRUE)),
+      .groups = "drop"
+    ) |>
+    kable(digits = 1,
+          caption = paste0(
+            "External Validation: Oxford AI Readiness — Cluster Means on All Pillars\n",
+            "(Oxford Insights 2025; treated as slow-moving institutional capacity proxy)")) |>
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) |>
+    print()
+
+  # Heatmap: pillar z-scores by cluster
+  ox_z <- oxford_val |>
+    dplyr::group_by(km_cluster) |>
+    dplyr::summarise(dplyr::across(dplyr::all_of(ox_pillar_cols),
+                                   ~ mean(.x, na.rm = TRUE)), .groups = "drop") |>
+    tidyr::pivot_longer(-km_cluster, names_to = "Pillar", values_to = "Mean_Score") |>
+    dplyr::group_by(Pillar) |>
+    dplyr::mutate(z_mean = as.numeric(scale(Mean_Score))) |>
+    dplyr::ungroup()
+
+  p_ox_heat <- ggplot(ox_z, aes(Pillar, km_cluster, fill = z_mean)) +
+    geom_tile(colour = "white", linewidth = 0.4) +
+    scale_fill_gradient2(low = "#D55E00", mid = "white", high = "#0072B2", midpoint = 0,
+                         name = "z-score") +
+    labs(title = "Oxford AI Readiness Pillars by Cluster (z-standardised across clusters)",
+         subtitle = "Blue = above average; Red = below average",
+         x = NULL, y = "Cluster") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1))
+  print(p_ox_heat)
+
+  # Boxplot: overall score by cluster
+  p_ox_box <- oxford_val |>
+    dplyr::filter(!is.na(overall_score)) |>
+    ggplot(aes(km_cluster, overall_score, fill = km_cluster)) +
+    geom_boxplot(alpha = 0.8) +
+    geom_jitter(width = 0.15, alpha = 0.5, size = 1.5) +
+    scale_fill_viridis_d(option = "D") +
+    labs(title = "Oxford AI Readiness Overall Score by Cluster",
+         x = "Cluster", y = "Overall Score (0–100)") +
+    theme_minimal() +
+    theme(legend.position = "none")
+  print(p_ox_box)
+
+  cat("Oxford coverage:", sum(!is.na(oxford_val$overall_score)), "of",
+      nrow(oxford_val), "clustered countries.\n")
+
+} else {
+  cat("Oxford AI Readiness data not available — external validation skipped.\n")
+}
+```
+
+------------------------------------------------------------------------
+
+# 6. Vulnerability Index & Rankings
+
+Clustering identifies *groups* of structurally similar countries but does not directly quantify *how vulnerable* each country is. To answer our core research question, we construct a composite **Vulnerability Index** that synthesises each country's structural profile into a single interpretable score.
+
+The index rests on a theoretically motivated two-part framework:
+
+**Exposure** measures the degree to which a country's economy is concentrated in activities most susceptible to AI automation. We operationalise it as the *average z-score* of three exposure indicators:
+
+$$\text{Exposure} = \frac{z(\text{Agric\_Empl}) + z(\text{Industry\_Empl}) + z(\text{Unemp\_Youth})}{3}$$
+
+Agricultural employment captures dependence on a sector with high manual-task intensity and low digitalisation. Industrial employment captures the share in manufacturing and related sectors where robotics and AI-driven automation are most advanced. Youth unemployment signals weak labour market absorption capacity — young people who cannot enter productive employment today face the greatest structural displacement risk tomorrow.
+
+**Resilience** captures the structural buffers that allow a country to adapt, retrain workers, and capture the productivity gains that AI offers. We operationalise it as the *average z-score* of five resilience indicators:
+
+$$\text{Resilience} = \frac{z(\text{GDP\_pc}) + z(\text{RD\_Intensity}) + z(\text{Tertiary\_Edu}) + z(\text{Internet\_Users}) + z(\text{Labor\_Part})}{5}$$
+
+The **Vulnerability Index** is:
+
+$$\text{Vulnerability} = \text{Exposure} - \text{Resilience}$$
+
+By averaging z-scores *within* each group, both Exposure and Resilience are expressed on the same mean-z-score scale (approximately −1 to +1), ensuring that neither group dominates the composite index due to having more components. Positive Vulnerability scores indicate net exposure outweighing resilience; negative values indicate net resilience.
+
+**Note on excluded analysis variables:** Two variables included in the PCA — `HiTech_Exports` and `GDP_Growth` — are deliberately excluded from the Vulnerability Index. `HiTech_Exports` is a trade-structure descriptor that partially overlaps with `Industry_Empl` and `RD_Intensity`; including it would introduce redundancy into the exposure-resilience balance. `GDP_Growth` is a *cyclical* indicator (it reflects the most recent business-cycle position, not a country's structural capacity), and vulnerability is inherently a structural, medium-to-long-run concept. Including cyclical measures would cause the index to penalise countries experiencing temporary economic slowdowns regardless of their structural fundamentals.
+
+```{r vulnerability}
+# z-scores computed on the reference-year cross-section (df_pca = df_ref + PCA scores)
+# so standardization reflects cross-country variation only, not temporal variation.
+df_pca <- df_pca |>
+  mutate(
+    Exposure = (z(Agric_Empl) + z(Industry_Empl) + z(Unemp_Youth)) / 3,
+    Resilience = (z(GDP_pc) + z(RD_Intensity) + z(Tertiary_Edu) +
+                  z(Internet_Users) + z(Labor_Part)) / 5,
+    Vulnerability = Exposure - Resilience
+  )
+```
+
+```{r vulnerability-rankings, fig.height=14, fig.width=10}
+# df_pca is already the reference-year cross-section (one row per country)
+rank_vuln <- df_pca |>
+  select(iso3c, country, Development_Tier, Vulnerability, Exposure, Resilience) |>
+  left_join(df_cluster |> select(iso3c, km_cluster), by = "iso3c") |>
+  arrange(desc(Vulnerability))
+
+ggplot(rank_vuln, aes(Vulnerability, reorder(country, Vulnerability),
+                       fill = Development_Tier)) +
+  geom_col(alpha = 0.85) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = tier_pal) +
+  labs(
+    title = "Global AI Vulnerability Index Rankings",
+    subtitle = "Most recent available year per country | Positive = more vulnerable | Negative = more resilient",
+    x = "Vulnerability Index (mean Exposure z-score − mean Resilience z-score)",
+    y = NULL, fill = "Development Tier"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 7))
+```
+
+### Top and Bottom Countries
+
+```{r top-bottom, results='asis'}
+tbl_cols <- c(Country = "country", Tier = "Development_Tier",
+              Cluster = "km_cluster",
+              Vulnerability = "Vulnerability",
+              Exposure = "Exposure", Resilience = "Resilience")
+
+cat("\n#### Top 10 Most Vulnerable Countries\n\n")
+rank_vuln |>
+  slice_head(n = 10) |>
+  select(all_of(tbl_cols)) |>
+  kable(digits = 3,
+        caption = paste("Most exposed to AI-driven disruption —", REF_YEAR)) |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) |>
+  print()
+
+cat("\n#### Top 10 Most Resilient Countries\n\n")
+rank_vuln |>
+  slice_tail(n = 10) |>
+  arrange(Vulnerability) |>         # most resilient (most negative) first
+  select(all_of(tbl_cols)) |>
+  kable(digits = 3,
+        caption = paste("Strongest structural buffers against AI disruption —", REF_YEAR)) |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) |>
+  print()
+```
+
+### Mean Vulnerability by Development Tier
+
+```{r vuln-by-tier}
+rank_vuln |>
+  group_by(Development_Tier) |>
+  summarise(
+    n = n(),
+    Mean_Vulnerability = mean(Vulnerability),
+    Mean_Exposure      = mean(Exposure),
+    Mean_Resilience    = mean(Resilience),
+    .groups = "drop"
+  ) |>
+  kable(digits = 3,
+        caption = "Mean Vulnerability Components by Development Tier") |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### Formal Tests of Vulnerability Differences
+
+```{r vuln-tests}
+# Kruskal-Wallis test: vulnerability differs across clusters?
+kw_cluster <- kruskal.test(Vulnerability ~ km_cluster, data = rank_vuln)
+cat("Kruskal-Wallis (Vulnerability ~ Cluster): H =", round(kw_cluster$statistic, 2),
+    ", df =", kw_cluster$parameter, ", p =", format.pval(kw_cluster$p.value, digits = 3), "\n")
+
+# Kruskal-Wallis test: vulnerability differs across development tiers?
+kw_tier <- kruskal.test(Vulnerability ~ Development_Tier, data = rank_vuln)
+cat("Kruskal-Wallis (Vulnerability ~ Tier): H =", round(kw_tier$statistic, 2),
+    ", df =", kw_tier$parameter, ", p =", format.pval(kw_tier$p.value, digits = 3), "\n")
+
+# Post-hoc pairwise Wilcoxon with Holm correction
+cat("\nPost-hoc pairwise Wilcoxon (Vulnerability ~ Tier, Holm-adjusted):\n")
+pairwise.wilcox.test(rank_vuln$Vulnerability, rank_vuln$Development_Tier,
+                     p.adjust.method = "holm") |> print()
+```
+
+### Exposure vs. Resilience Scatter
+
+This scatter plot is the most informative single visualisation of the vulnerability framework. Countries above the diagonal (Exposure > Resilience) are structurally vulnerable; those below are structurally resilient. The distance from the diagonal is the Vulnerability Index score.
+
+```{r exposure-resilience, fig.height=8, fig.width=10}
+ggplot(rank_vuln, aes(Resilience, Exposure, colour = Development_Tier, label = iso3c)) +
+  geom_point(size = 3, alpha = 0.85) +
+  geom_text_repel(size = 2.5, max.overlaps = 25) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") +
+  scale_colour_manual(values = tier_pal) +
+  annotate("text", x = -1.2, y = 1.0, label = "High Exposure\nLow Resilience\n(Most Vulnerable)",
+           hjust = 0, size = 3, colour = "tomato", fontface = "italic") +
+  annotate("text", x = 0.5, y = -0.8, label = "Low Exposure\nHigh Resilience\n(Most Resilient)",
+           hjust = 0, size = 3, colour = "steelblue", fontface = "italic") +
+  labs(
+    title = paste("Exposure vs. Resilience — Reference Year", REF_YEAR),
+    subtitle = "Diagonal = zero vulnerability; above = net exposed, below = net resilient",
+    x = "Resilience (mean z-score of GDP pc, R&D, Tertiary Edu, Internet, Labor Part)",
+    y = "Exposure (mean z-score of Agric Empl, Industry Empl, Youth Unemp)",
+    colour = "Development Tier"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+### Vulnerability Index Sensitivity Analysis
+
+Equal weighting is a transparent but potentially influential choice. We test ranking stability across four alternative specifications: (1) **PCA-weighted** — using PC1 loadings as variable weights; (2) **leave-one-out** — removing each variable in turn; (3) **double R&D weight**; and (4) **raw PC1 score** as a standalone proxy.
+
+```{r sensitivity, fig.height=6}
+# Baseline ranking for comparison
+baseline_rank <- rank_vuln |> mutate(rank_base = row_number()) |> select(iso3c, rank_base)
+
+# Get PC1 loadings for PCA-weighted specification
+pc1_loads <- get_pca_var(pca_res)$coord[, 1]
+exposure_vars  <- c("Agric_Empl", "Industry_Empl", "Unemp_Youth")
+resilience_vars <- c("GDP_pc", "RD_Intensity", "Tertiary_Edu", "Internet_Users", "Labor_Part")
+
+# Spec 1: PCA-weighted vulnerability
+exp_weights <- abs(pc1_loads[exposure_vars]) / sum(abs(pc1_loads[exposure_vars]))
+res_weights <- abs(pc1_loads[resilience_vars]) / sum(abs(pc1_loads[resilience_vars]))
+
+vuln_pca_wt <- df_pca |>
+  mutate(across(all_of(analysis_vars), z)) |>
+  mutate(
+    E_pca = rowSums(across(all_of(exposure_vars)) * matrix(exp_weights, nrow = n(), ncol = 3, byrow = TRUE)),
+    R_pca = rowSums(across(all_of(resilience_vars)) * matrix(res_weights, nrow = n(), ncol = 5, byrow = TRUE)),
+    V_pca = E_pca - R_pca
+  ) |>
+  select(iso3c, V_pca) |>
+  arrange(desc(V_pca)) |>
+  mutate(rank_pca = row_number())
+
+# Spec 2: Double weight on R&D
+vuln_dbl_rd <- df_pca |>
+  mutate(across(all_of(analysis_vars), z)) |>
+  mutate(
+    R_dbl = (GDP_pc + 2*RD_Intensity + Tertiary_Edu + Internet_Users + Labor_Part) / 6,
+    V_dbl = (Agric_Empl + Industry_Empl + Unemp_Youth) / 3 - R_dbl
+  ) |>
+  select(iso3c, V_dbl) |>
+  arrange(desc(V_dbl)) |>
+  mutate(rank_dbl = row_number())
+
+# Spec 3: Raw PC1 as vulnerability proxy (reversed: low PC1 = more vulnerable)
+vuln_pc1 <- df_pca |>
+  select(iso3c, PC1) |>
+  arrange(PC1) |>
+  mutate(rank_pc1 = row_number())
+
+# Combine and compute Spearman correlations
+sens_df <- baseline_rank |>
+  left_join(vuln_pca_wt |> select(iso3c, rank_pca), by = "iso3c") |>
+  left_join(vuln_dbl_rd |> select(iso3c, rank_dbl), by = "iso3c") |>
+  left_join(vuln_pc1 |> select(iso3c, rank_pc1), by = "iso3c")
+
+sens_cors <- tibble(
+  Specification = c("PCA-weighted", "Double R&D weight", "Raw PC1 (reversed)"),
+  Spearman_rho = c(
+    cor(sens_df$rank_base, sens_df$rank_pca, method = "spearman", use = "complete.obs"),
+    cor(sens_df$rank_base, sens_df$rank_dbl, method = "spearman", use = "complete.obs"),
+    cor(sens_df$rank_base, sens_df$rank_pc1, method = "spearman", use = "complete.obs")
+  )
+)
+
+sens_cors |>
+  kable(digits = 3,
+        caption = "Vulnerability Ranking Sensitivity: Spearman Rank Correlation with Baseline") |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+# Visualise rank stability
+sens_long <- sens_df |>
+  pivot_longer(cols = c(rank_pca, rank_dbl, rank_pc1), names_to = "spec", values_to = "alt_rank") |>
+  mutate(spec = recode(spec, rank_pca = "PCA-weighted", rank_dbl = "Double R&D", rank_pc1 = "Raw PC1"))
+
+ggplot(sens_long, aes(rank_base, alt_rank)) +
+  geom_point(alpha = 0.5, size = 1.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "red") +
+  facet_wrap(~ spec, ncol = 3) +
+  labs(title = "Vulnerability Ranking Stability Across Specifications",
+       subtitle = "Points on the diagonal = identical rankings; Spearman rho reported in table above",
+       x = "Baseline Rank", y = "Alternative Specification Rank") +
+  theme_minimal()
+```
+
+### Bootstrap Confidence Intervals on Vulnerability Rankings
+
+```{r bootstrap-ci, fig.height=10}
+set.seed(123)
+B_boot <- 1000
+
+boot_ranks <- purrr::map_dfr(seq_len(B_boot), function(b) {
+  # Resample countries with replacement
+  idx <- sample(nrow(df_pca), replace = TRUE)
+  boot_df <- df_pca[idx, ]
+  boot_df |>
+    mutate(
+      E = (z(Agric_Empl) + z(Industry_Empl) + z(Unemp_Youth)) / 3,
+      R = (z(GDP_pc) + z(RD_Intensity) + z(Tertiary_Edu) + z(Internet_Users) + z(Labor_Part)) / 5,
+      V = E - R
+    ) |>
+    arrange(desc(V)) |>
+    mutate(rank = row_number(), boot = b) |>
+    select(iso3c, rank, boot)
+})
+
+rank_ci <- boot_ranks |>
+  group_by(iso3c) |>
+  summarise(
+    median_rank = median(rank),
+    ci_lo = quantile(rank, 0.025),
+    ci_hi = quantile(rank, 0.975),
+    .groups = "drop"
+  ) |>
+  arrange(median_rank) |>
+  left_join(rank_vuln |> select(iso3c, country, Development_Tier), by = "iso3c")
+
+ggplot(rank_ci, aes(x = median_rank, y = reorder(country, -median_rank),
+                     colour = Development_Tier)) +
+  geom_point(size = 2) +
+  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi), height = 0, alpha = 0.5) +
+  scale_colour_manual(values = tier_pal) +
+  labs(title = "Bootstrap 95% CI on Vulnerability Rankings (1,000 resamples)",
+       subtitle = "Wide intervals = rank is sensitive to sample composition",
+       x = "Rank (1 = most vulnerable)", y = NULL, colour = "Tier") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 6), legend.position = "bottom")
+```
+
+### Imputation Sensitivity Check
+
+The complete-case filter removes countries with missing data on any analysis variable. This section tests whether our clustering results are sensitive to this choice by comparing the complete-case clustering against a multiple-imputation-based clustering. We impute missing values using predictive mean matching (PMM), re-run PCA and K-Means on the imputed dataset, and compare the resulting partition (for the overlapping countries) with the complete-case partition via ARI.
+
+```{r imputation-sensitivity}
+# Get the pre-filtered dataset with missing values
+df_impute_base <- all_data |>
+  filter(year == REF_YEAR, !is.na(Development_Tier)) |>
+  group_by(iso3c) |>
+  slice(1) |>
+  ungroup()
+
+# Only proceed if there are actually missing values to impute
+n_miss <- sum(!complete.cases(df_impute_base[, analysis_vars]))
+
+if (n_miss >= 5 && requireNamespace("mice", quietly = TRUE)) {
+  set.seed(42)
+  imp <- mice::mice(df_impute_base[, analysis_vars], m = 5, method = "pmm",
+                    maxit = 20, printFlag = FALSE)
+
+  # Run PCA + K-Means on each imputed dataset and compare with complete-case
+  mi_aris <- sapply(1:5, function(m) {
+    imp_data <- mice::complete(imp, m)
+    imp_pca  <- prcomp(imp_data, scale. = TRUE)
+    imp_scores <- imp_pca$x[, 1:n_retain]
+    set.seed(42)
+    imp_km <- kmeans(imp_scores, centers = k_final, nstart = 100)
+
+    # Match to complete-case countries
+    overlap <- which(df_impute_base$iso3c %in% df_cluster$iso3c)
+    cc_idx  <- match(df_impute_base$iso3c[overlap], df_cluster$iso3c)
+
+    adjustedRandIndex(imp_km$cluster[overlap], km_fit$cluster[cc_idx])
+  })
+
+  mi_summary <- tibble(
+    Metric = c("Mean ARI (MI vs. complete-case)", "Min ARI", "Max ARI",
+               "Countries gained via imputation"),
+    Value = c(round(mean(mi_aris), 3), round(min(mi_aris), 3),
+              round(max(mi_aris), 3), nrow(df_impute_base) - nrow(df_cluster))
+  )
+
+  mi_summary |>
+    kable(caption = "Multiple Imputation Sensitivity: ARI with Complete-Case Clustering") |>
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+} else {
+  cat("*Imputation sensitivity check skipped:*",
+      if(n_miss < 5) "fewer than 5 countries have missing values at the reference year — complete-case analysis already captures nearly all available countries."
+      else "the `mice` package is not installed.")
+}
+```
+
+------------------------------------------------------------------------
+
+# 7. Geographic Visualization
+
+Maps allow readers to see global geographic patterns at a glance. We present two complementary choropleth maps: the first shows the data-driven cluster assignments; the second shows the continuous Vulnerability Index scores.
+
+```{r world-map-clusters, fig.height=7, fig.width=12}
+world_sf <- ne_countries(scale = "medium", returnclass = "sf") |>
+  select(iso_a3, sovereignt, geometry) |>
+  # Patch known Natural Earth ↔ ISO 3166 / WDI discrepancies, then fall back
+  # to countrycode() via country name for any remaining -99 (unassigned) entries
+  mutate(
+    iso_join = case_when(
+      iso_a3 == "KOS" ~ "XKX",   # Kosovo: NE "KOS", WDI "XKX"
+      iso_a3 == "SAH" ~ "ESH",   # Western Sahara: NE "SAH", WDI "ESH"
+      iso_a3 == "SCG" ~ "SRB",   # Serbia (old Serbia-Montenegro code)
+      iso_a3 == "-99" ~ countrycode(sovereignt, "country.name", "iso3c",
+                                    warn = FALSE),  # resolve by name
+      TRUE            ~ iso_a3
+    )
+  ) |>
+  select(iso_join, geometry)
+
+map_df <- rank_vuln |> select(iso3c, km_cluster, Vulnerability, Development_Tier)
+
+map_data <- world_sf |>
+  left_join(map_df, by = c("iso_join" = "iso3c"))
+
+# All data is from the reference year cross-section
+map_yr_label <- as.character(REF_YEAR)
+
+# Map 1: Cluster assignments — Robinson projection (balanced visual distortion)
+ggplot(map_data) +
+  geom_sf(aes(fill = km_cluster), colour = "white", linewidth = 0.15) +
+  scale_fill_viridis_d(option = "D", name = "Cluster", na.value = "grey85") +
+  coord_sf(crs = st_crs("+proj=robin"), datum = NA) +
+  labs(
+    title = "Global Country Clusters (K-Means)",
+    subtitle = paste0("k = ", k_final, " clusters on PC1\u2013PC", n_pcs,
+                      " | Data: ", map_yr_label),
+    caption = "Data: World Bank WDI. Grey = insufficient data for analysis."
+  ) +
+  theme_void() +
+  theme(
+    plot.title    = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, margin = margin(b = 4)),
+    plot.caption  = element_text(hjust = 0.5, size = 8, colour = "grey50"),
+    legend.position  = "bottom",
+    legend.title     = element_text(face = "bold")
+  )
+```
+
+```{r world-map-vulnerability, fig.height=7, fig.width=12}
+# Map 2: Continuous vulnerability score —Mollweide equal-area projection
+# (choropleth maps encoding quantity must use equal-area so geographic size
+#  does not bias perception of the encoded variable)
+ggplot(map_data) +
+  geom_sf(aes(fill = Vulnerability), colour = "white", linewidth = 0.15) +
+  scale_fill_gradient2(
+    low      = "#2166AC",   # Blue = resilient
+    mid      = "#F7F7F7",
+    high     = "#D6604D",   # Red = vulnerable
+    midpoint = 0,
+    name     = "Vulnerability\nIndex",
+    na.value = "grey85"
+  ) +
+  coord_sf(crs = st_crs("+proj=moll"), datum = NA) +
+  labs(
+    title    = "Global AI Vulnerability Index",
+    subtitle = paste0("Red = More Vulnerable  |  Blue = More Resilient  |  Data: ", map_yr_label),
+    caption  = "Data: World Bank WDI. Grey = insufficient data for analysis."
+  ) +
+  theme_void() +
+  theme(
+    plot.title       = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle    = element_text(hjust = 0.5, size = 10, margin = margin(b = 4)),
+    plot.caption     = element_text(hjust = 0.5, size = 8, colour = "grey50"),
+    legend.position  = "bottom",
+    legend.key.width = unit(2.5, "cm"),
+    legend.title     = element_text(face = "bold")
+  )
+```
+
+The geographic patterns are informative: the red-to-blue gradient illustrates the global North-South divide in AI resilience. Several outliers are worth noting: Gulf Cooperation Council countries (Saudi Arabia, UAE, Kuwait) cluster separately from other high-income economies due to their resource-export dependence and relatively lower R&D intensity — their wealth does not automatically translate into innovation-driven resilience. Conversely, some middle-income countries in East Asia (e.g., Malaysia, Thailand) show lower vulnerability than their income tier would predict, reflecting stronger digital infrastructure and manufacturing sophistication.
+
+### Interactive Vulnerability Map
+
+```{r interactive-map, fig.height=7, fig.width=10}
+# Interactive Plotly choropleth — native plotly (geom_sf is not supported by ggplotly)
+map_interactive <- rank_vuln |>
+  plot_ly(
+    type = "choropleth",
+    locations = ~iso3c,
+    locationmode = "ISO-3",
+    z = ~round(Vulnerability, 3),
+    text = ~paste0(country, "<br>Tier: ", Development_Tier,
+                   "<br>Cluster: ", km_cluster,
+                   "<br>Vulnerability: ", round(Vulnerability, 3)),
+    hoverinfo = "text",
+    colorscale = list(c(0, "#2166AC"), c(0.5, "#F7F7F7"), c(1, "#D6604D")),
+    zmid = 0,
+    colorbar = list(title = "Vulnerability")
+  ) |>
+  layout(
+    title = list(text = "Interactive Vulnerability Map (hover for details)"),
+    geo = list(showframe = FALSE, showcoastlines = TRUE,
+               projection = list(type = "robinson"))
+  )
+map_interactive
+```
+
+### GMM Classification Uncertainty Map
+
+Countries with high GMM uncertainty sit near the boundary between two clusters — their structural profile is genuinely ambiguous. This map identifies them geographically.
+
+```{r uncertainty-map, fig.height=7, fig.width=12}
+unc_data <- df_cluster |> select(iso3c, mc_uncertainty)
+map_unc <- world_sf |>
+  left_join(unc_data, by = c("iso_join" = "iso3c"))
+
+ggplot(map_unc) +
+  geom_sf(aes(fill = mc_uncertainty), colour = "white", linewidth = 0.15) +
+  scale_fill_viridis_c(option = "inferno", direction = -1,
+                       name = "GMM\nUncertainty", na.value = "grey85") +
+  coord_sf(crs = st_crs("+proj=robin"), datum = NA) +
+  labs(title = "GMM Classification Uncertainty",
+       subtitle = "Darker = more certain cluster assignment; lighter = borderline countries",
+       caption = "Countries with uncertainty > 0.10 sit near structural boundaries between clusters.") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5),
+        legend.position = "bottom", legend.key.width = unit(2, "cm"))
+```
+
+### Temporal Trajectories in PCA Space (2015–2025)
+
+How have countries moved through the structural landscape over the past decade? We project all panel years into the reference-year PCA space and trace the trajectories of selected countries.
+
+```{r temporal-trajectory, fig.height=8, fig.width=10}
+# Project all panel years into the PCA space defined by the reference year
+# Manual projection: center and scale using reference-year parameters, then multiply by loadings
+ref_means <- colMeans(df_ref[, analysis_vars])
+ref_sds   <- apply(df_ref[, analysis_vars], 2, sd)
+
+df_panel_scaled <- df_cc |>
+  mutate(across(all_of(analysis_vars), ~ (. - ref_means[cur_column()]) / ref_sds[cur_column()]))
+
+panel_scores <- as.matrix(df_panel_scaled[, analysis_vars]) %*% pca_res$var$coord[, 1:2]
+colnames(panel_scores) <- c("PC1_proj", "PC2_proj")
+
+df_trajectory <- df_cc |>
+  bind_cols(as_tibble(panel_scores))
+
+# Select interesting countries: top 3 most improved + top 3 most deteriorated + 3 largest
+traj_change <- df_trajectory |>
+  group_by(iso3c, country) |>
+  filter(n() >= 3) |>  # need at least 3 years
+  summarise(
+    pc1_first = PC1_proj[which.min(year)],
+    pc1_last  = PC1_proj[which.max(year)],
+    change    = pc1_last - pc1_first,
+    .groups = "drop"
+  ) |>
+  arrange(desc(abs(change)))
+
+top_movers <- traj_change |> slice_head(n = 8) |> pull(iso3c)
+# Also include a few large/interesting countries
+highlight <- unique(c(top_movers, "CHN", "IND", "USA", "BRA", "NGA"))
+highlight <- intersect(highlight, df_trajectory$iso3c)
+
+df_traj_sel <- df_trajectory |> filter(iso3c %in% highlight)
+
+ggplot(df_traj_sel, aes(PC1_proj, PC2_proj, group = iso3c, colour = iso3c)) +
+  geom_path(arrow = arrow(length = unit(0.15, "cm"), type = "closed"),
+            alpha = 0.7, linewidth = 0.8) +
+  geom_point(data = df_traj_sel |> group_by(iso3c) |> filter(year == max(year)),
+             size = 3) +
+  geom_text_repel(data = df_traj_sel |> group_by(iso3c) |> filter(year == max(year)),
+                  aes(label = iso3c), size = 3, fontface = "bold") +
+  labs(
+    title = "Temporal Trajectories in PCA Space (2015–2025)",
+    subtitle = "Arrows show movement over time; projected into reference-year PCA space",
+    x = sprintf("PC1 (%.1f%%)", eig_tbl$variance.percent[1]),
+    y = sprintf("PC2 (%.1f%%)", eig_tbl$variance.percent[2])
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+------------------------------------------------------------------------
+
+# 8. Results and Discussion
+
+```{r rd-setup, include=FALSE}
+# Pre-compute cluster labels and summary objects needed for inline references
+# in the Results and Discussion prose. All source objects (cluster_z, sil_summary,
+# oxford_val, etc.) are guaranteed to exist by the time this chunk runs.
+
+# Rank clusters by "structural development score":
+# sum of z-means on resilience indicators minus sum of z-means on exposure indicators.
+cluster_dev_rank <- cluster_z |>
+  dplyr::mutate(
+    dev_score = GDP_pc + RD_Intensity + Internet_Users + Tertiary_Edu + HiTech_Exports
+                - Agric_Empl - Unemp_Youth - Unemp_Total
+  ) |>
+  dplyr::arrange(desc(dev_score)) |>
+  dplyr::mutate(rank = dplyr::row_number())
+
+cl_resilient <- cluster_dev_rank |> dplyr::filter(rank == 1) |> dplyr::pull(km_cluster)
+cl_exposed   <- cluster_dev_rank |> dplyr::filter(rank == dplyr::n()) |> dplyr::pull(km_cluster)
+cl_middle    <- cluster_dev_rank |> dplyr::filter(!km_cluster %in% c(cl_resilient, cl_exposed)) |>
+                dplyr::pull(km_cluster)
+
+# Cluster sizes at reference year
+cl_sizes <- df_cluster |> dplyr::count(km_cluster, name = "n_countries")
+
+n_resilient <- cl_sizes |> dplyr::filter(km_cluster == cl_resilient) |> dplyr::pull(n_countries)
+n_exposed   <- cl_sizes |> dplyr::filter(km_cluster == cl_exposed)   |> dplyr::pull(n_countries)
+
+# Key z-means for in-text reporting
+gz <- function(cl, var) {
+  round(cluster_z |> dplyr::filter(km_cluster == cl) |> dplyr::pull({{ var }}), 2)
+}
+
+# Tier composition percentages
+cl_tier_pct <- df_clustered |>
+  dplyr::count(km_cluster, Development_Tier) |>
+  dplyr::group_by(km_cluster) |>
+  dplyr::mutate(pct = round(100 * n / sum(n))) |>
+  dplyr::ungroup()
+
+pct_adv_resilient <- cl_tier_pct |>
+  dplyr::filter(km_cluster == cl_resilient,
+                Development_Tier == "Advanced Economies") |>
+  dplyr::pull(pct)
+pct_dev_exposed <- cl_tier_pct |>
+  dplyr::filter(km_cluster == cl_exposed,
+                Development_Tier == "Developing Economies") |>
+  dplyr::pull(pct)
+
+# Per-cluster silhouette for prose
+sil_best  <- sil_summary |> dplyr::slice_max(avg_sil, n = 1, with_ties = FALSE)
+sil_worst <- sil_summary |> dplyr::slice_min(avg_sil, n = 1, with_ties = FALSE)
+
+# Oxford means by cluster (only if data present)
+has_ox <- exists("oxford_val") && "overall_score" %in% names(oxford_val) &&
+          any(!is.na(oxford_val$overall_score))
+if (has_ox) {
+  ox_cl_means <- oxford_val |>
+    dplyr::group_by(km_cluster) |>
+    dplyr::summarise(mean_ox = round(mean(overall_score, na.rm = TRUE), 1),
+                     .groups = "drop") |>
+    dplyr::arrange(desc(mean_ox))
+  ox_resilient <- ox_cl_means |> dplyr::filter(km_cluster == cl_resilient) |> dplyr::pull(mean_ox)
+  ox_exposed   <- ox_cl_means |> dplyr::filter(km_cluster == cl_exposed)   |> dplyr::pull(mean_ox)
+  ox_n_covered <- sum(!is.na(oxford_val$overall_score))
+  ox_coverage_pct <- round(100 * ox_n_covered / nrow(oxford_val))
+} else {
+  ox_resilient <- ox_exposed <- ox_n_covered <- ox_coverage_pct <- NA
+}
+
+# Kaggle coverage
+kaggle_n <- if (exists("kaggle_val")) nrow(kaggle_val) else 0
+```
+
+This section synthesises the full analytical pipeline into an integrated, evidence-grounded narrative. Every quantitative claim is derived directly from the tables and figures produced in Sections 3–7; no result is stated here that is not computable from the code in this report. Where values depend on computed results, they are rendered inline from R objects.
+
+---
+
+## 8.1 Sample Construction and Data Quality
+
+**What we actually analysed.** The World Bank WDI panel covers `r n_distinct(wdi_raw$iso3c)` countries across 2015–2025. After restricting to country-level observations with a valid income group, applying the eleven-variable complete-case filter, and removing the years outside the analysis window, the working dataset contains `r nrow(df_cc)` country-year observations covering `r n_distinct(df_cc$iso3c)` countries. The cross-section used for clustering — reference year `r REF_YEAR`, the year with the most complete observations in `df_cc` — comprises `r n_distinct(df_cluster$iso3c)` countries. This sample satisfies the stated requirements of *n* > 100 observations and *p* ≥ 10 variables (attrition table, Section 3.3).
+
+**Where the sample shrinks, and why it matters.** The complete-case filter is the single largest source of attrition, reducing the country count from `r n_distinct(all_data$iso3c)` (countries with any WDI data) to `r n_distinct(df_cc$iso3c)` — a loss of `r n_distinct(all_data$iso3c) - n_distinct(df_cc$iso3c)` countries. This drop is not random. The missingness-by-tier figure (Section 3.2) shows that R&D expenditure and tertiary education attainment — the two highest-missing variables — are systematically under-reported by low-income countries: missing rates for these indicators among Developing Economies are visibly higher than for Advanced or Emerging Economies on the same figure. The excluded-countries table (Section 3.3) confirms that the majority of dropped countries are in the Developing Economies tier.
+
+**This is the most important limitation of the entire analysis.** The countries most exposed to AI-driven disruption — those with the weakest research, education, and digital infrastructure — are also the most likely to be dropped from the sample due to incomplete reporting. The vulnerability rankings in Section 6 and the cluster typology in Section 5 describe the `r n_distinct(df_cluster$iso3c)` countries for which data exist; they do not characterise all developing economies, and the true distribution of global vulnerability is almost certainly more severe than the rankings suggest.
+
+**Missingness by variable.** Overall, R&D intensity shows the highest missing rate across the full panel (>30%, missing-data figure, Section 3.2), followed by tertiary education. Internet users, labour force participation, and total unemployment have the lowest missingness. Within the complete-case sample, these missingness patterns are resolved by definition — all eleven variables are observed for every retained country-year — but the selection they introduce is what the attrition discussion above addresses.
+
+---
+
+## 8.2 PCA: The Structural Geometry of the Global Economy
+
+**Statistical suitability.** Before computing PCA we tested whether the data's correlation structure justifies dimensionality reduction. The Kaiser-Meyer-Olkin (KMO) measure of sampling adequacy is **`r round(kmo_result$MSA, 3)`** — `r if(kmo_result$MSA >= 0.80) "exceeding the 0.80 'excellent' threshold" else if(kmo_result$MSA >= 0.70) "in the 'good' 0.70–0.80 range" else "above the 0.50 minimum acceptable threshold"` (Kaiser 1974), confirming that the variables share substantial common variance. Bartlett's test of sphericity is significant (*χ²* = `r round(bartlett_result$chisq, 1)`, df = `r bartlett_result$df`, *p* `r format.pval(bartlett_result$p.value, digits = 3)`), rejecting the null that the correlation matrix is an identity matrix. Both tests confirm the data are well-suited for PCA.
+
+**Why this is expected.** The correlation matrix (Section 3.7) shows the pattern these tests detect: GDP per capita, R&D intensity, internet users, and tertiary education form a tight positive cluster (pairwise *r* consistently above 0.60 for most pairs), while agricultural employment share loads negatively on this same group. This co-movement — the empirical signature of the global development gradient — is precisely the structure PCA is designed to compress into fewer dimensions. Youth and total unemployment show their own correlation (Section 3.7 note), constituting a secondary labour-market signal.
+
+**How many components to retain.** The Kaiser criterion (eigenvalue ≥ 1) retains **`r n_retain` components**, explaining **`r round(cum_var, 1)`%** of total variance (scree plot and eigenvalue table, Section 4.3). The scree plot shows a pronounced elbow after the first component, confirming that PC1 carries by far the most structural information; subsequent components each capture progressively smaller but statistically meaningful shares. Retaining all `r n_retain` Kaiser-qualifying components is conservative — it ensures that no structurally significant dimension is discarded before clustering, at the cost of retaining some noise in the higher-order components.
+
+**What the components mean.** The loadings table and variable map (Sections 4.4–4.6) reveal the following structure:
+
+**PC1 — "Global Development and Digital Readiness"** (`r round(eig_tbl$variance.percent[1], 1)`% of variance). This is the dominant structural dimension of the global economy in this data. It loads positively on GDP per capita, R&D intensity, internet users, tertiary education, and high-technology exports, and negatively on agricultural employment share. The variable contribution figure (Section 4.5) confirms these are the most influential variables for PC1. A country scoring high on PC1 is wealthy, heavily digital, R&D-intensive, and has a small agricultural sector; a country scoring low is poorer, largely agrarian, and has limited digital infrastructure. This dimension directly operationalises the "resilience vs. exposure" contrast that motivates our vulnerability framework.
+
+The biplot (Section 4.7) provides the clearest validation of this interpretation: colouring countries by World Bank income tier produces a near-perfect left-to-right gradient from Developing to Advanced economies along the PC1 axis. The unsupervised PCA has rediscovered the global income hierarchy without being told it exists — a reassuring sign that the eleven indicators are capturing genuine structural variation and not noise.
+
+**PC2 and higher components** (`r round(eig_tbl$variance.percent[2], 1)`% and below per component) capture secondary dimensions of structural variation not explained by the development axis. Based on the loadings, PC2 is driven by a different subset of variables — likely labour market composition or industrial structure indicators (see contributions figure, Section 4.5). These components introduce important nuance: two countries can have similar PC1 scores but very different labour market profiles, and it is these higher-order dimensions that allow the clustering to differentiate within income tiers.
+
+**Representation quality.** The cos² figure (Section 4.8) shows that most countries in the `r REF_YEAR` cross-section have cos² > 0.5 on the PC1–PC2 plane, meaning their biplot position accurately reflects their full multi-dimensional structural profile. Countries flagged in red (cos² < 0.5) have important structural features captured by PC3 or higher; their positions in the 2D biplot should be read with caution, and their cluster assignments rest more heavily on the higher-order components.
+
+---
+
+## 8.3 Clustering: Choice of *k*, Cohesion, and Robustness
+
+**How *k* = `r k_final` was selected.** Four independent diagnostics were applied to the `r n_distinct(df_cluster$iso3c)` × `r n_pcs` matrix of PCA scores (Section 5.1):
+
+1. The **elbow plot** (within-cluster sum of squares) shows a clear kink where the rate of improvement drops sharply.
+2. The **average silhouette width** peaks at *k* = `r sil_tbl |> slice_max(Avg_Silhouette, n=1, with_ties=FALSE) |> pull(k)`, identifying the partition with the best ratio of within-cluster cohesion to between-cluster separation.
+3. The **gap statistic** (100 bootstrap reference samples) identifies the smallest *k* where observed clustering is substantially tighter than random data with no cluster structure.
+4. **NbClust** (30 indices, majority vote) selects *k* = `r k_nb`.
+
+The convergence of all four methods on *k* = `r k_final` provides strong, redundant justification for this choice. This number is also substantively plausible: a global sample spanning the full income distribution is naturally expected to produce at least three distinct structural groups corresponding broadly to the high-, middle-, and low-income tiers, with possible refinement within tiers.
+
+**Within-cluster cohesion and separation.** The overall average silhouette width across all `r n_distinct(df_cluster$iso3c)` countries is **`r round(overall_avg, 3)`** (silhouette plots, Section 5.2). Silhouette values above 0.50 indicate a reasonable cluster structure; values above 0.70 indicate strong structure (Kaufman & Rousseeuw 1990). `r if(overall_avg >= 0.70) "The obtained value indicates a strong, well-separated cluster structure." else if(overall_avg >= 0.50) "The obtained value indicates a reasonable cluster structure with meaningful separation between groups." else "The obtained value is below the conventional 0.50 threshold, suggesting that some country assignments are ambiguous — a point acknowledged in the interpretation of cluster boundaries below."`
+
+Per-cluster silhouette statistics reveal important heterogeneity in cohesion. Cluster `r sil_best$cluster` is the most internally consistent, with an average silhouette width of `r round(sil_best$avg_sil, 3)` across `r sil_best$n` countries, and only `r round(sil_best$neg_pct, 1)`% of its members assigned a negative silhouette (meaning they are closer to a different cluster than to their own). By contrast, cluster `r sil_worst$cluster` shows the weakest cohesion (average silhouette `r round(sil_worst$avg_sil, 3)`), with `r round(sil_worst$neg_pct, 1)`% of its countries having negative silhouette values. These borderline members sit near the structural boundary between two groups, and their cluster assignment is inherently less certain. This ambiguity is acknowledged, not concealed: it reflects genuine structural heterogeneity among countries that do not fall cleanly into any single typology.
+
+**Stability to initialisation.** K-Means was re-run with five different random seeds (Section 5.6). The ARI between all ten pairwise seed combinations ranges from `r seed_ari_min` to `r seed_ari_max`. `r if(seed_ari_min >= 0.99) "Values at or near 1.0 confirm that the algorithm converges to an identical partition regardless of starting configuration — the result is not sensitive to initialisation." else if(seed_ari_min >= 0.90) paste0("Values this close to 1.0 confirm near-perfect reproducibility across initialisations.") else paste0("Values in this range indicate strong but not perfect reproducibility; a small number of borderline countries may switch clusters across different starts.")`
+
+**Stability to sample composition.** The subsample stability analysis (50 bootstrap rounds, 80% of countries retained per round; Section 5.5) yields a mean ARI of **`r round(mu, 3)`** (median `r round(med, 3)`; 10th–90th percentile: `r round(p10, 3)`–`r round(p90, 3)`). The `r stability_label` ARI distribution — with most values in the green band above 0.90 on the stability histogram — confirms that no small subset of countries is driving the cluster structure. Remove any 20% of the sample at random and the remaining 80% still partition into essentially the same groups.
+
+**Cross-method agreement.** The three clustering algorithms rest on fundamentally different assumptions: K-Means assumes spherical, equally-sized clusters and minimises Euclidean distance to centroids; Ward agglomerative hierarchical clustering builds a full merge hierarchy and minimises within-cluster variance at each step; and Gaussian Mixture Models allow ellipsoidal clusters of varying shape and size, with soft probabilistic assignments. Their convergence is therefore the strongest possible evidence that the identified groups are genuine structural features of the data rather than artefacts of any one algorithm's geometry.
+
+Pairwise Adjusted Rand Index across the three methods (Section 5.5):
+
+| Method pair | ARI |
+|---|---|
+| K-Means vs Hierarchical | `r round(ari_km_hc, 3)` |
+| K-Means vs Model-Based (GMM) | `r round(ari_km_mc, 3)` |
+| Hierarchical vs Model-Based (GMM) | `r round(ari_hc_mc, 3)` |
+
+ARI > 0.80 indicates strong agreement; > 0.65 moderate-to-strong (Hubert & Arabie 1985). The minimum pairwise ARI of `r round(min(ari_km_hc, ari_km_mc, ari_hc_mc), 3)` is `r if(min(ari_km_hc, ari_km_mc, ari_hc_mc) >= 0.80) "in the strong agreement range" else if(min(ari_km_hc, ari_km_mc, ari_hc_mc) >= 0.65) "in the moderate-to-strong agreement range" else "moderate"`, indicating substantial consensus across the three methods.
+
+**Linkage sensitivity.** Replacing Ward.D2 with average linkage yields ARI = `r round(ari_ward_avg, 3)` relative to the Ward solution; replacing it with complete linkage yields ARI = `r round(ari_ward_comp, 3)` (linkage sensitivity table, Section 5.3). `r if(min(ari_ward_avg, ari_ward_comp) >= 0.80) "Both values indicate near-identical solutions — the cluster structure is robust to the choice of linkage criterion." else if(min(ari_ward_avg, ari_ward_comp) >= 0.65) "Both values indicate strong agreement — the broad groupings are stable across linkage methods, even if some individual country assignments shift." else "Some divergence is present, suggesting that the Ward.D2 solution captures a somewhat different geometry than alternative linkage rules; this is acknowledged as a robustness caveat."`
+
+**The GMM independently selected *k* = `r mc_fit$G`** with a `r mc_fit$modelName` covariance structure via BIC (Section 5.4). `r if(mc_fit$G == k_final) paste0("This independently confirms k = ", k_final, ": the probabilistic BIC criterion — which penalises model complexity — agrees with the majority vote from the distance-based methods. The convergence across such different selection frameworks is strong evidence that this partition number reflects a genuine feature of the data.") else paste0("This differs from k = ", k_final, " selected by the distance-based methods. The GMM's additional flexibility in fitting non-spherical, unequally sized clusters may reflect finer structural distinctions that the spherical K-Means geometry cannot express. For interpretability and consistency with the NbClust majority vote, we retain k = ", k_final, " as the basis for profiling and external validation.")`
+
+---
+
+## 8.4 What Do the Clusters Actually Look Like?
+
+Cluster profiles are based on mean z-scored values of all eleven analysis variables within each cluster at the reference year `r REF_YEAR` (z-profile table and heatmap, Section 5.7). A z-score of +1 means the cluster average is one standard deviation above the cross-country mean; −1 means one standard deviation below. Raw means are also available in the raw-profile table. The five prototype countries closest to each cluster centroid in PCA space are listed in the prototypes table (Section 5.7) and provide the most concrete anchor for each group.
+
+**Cluster labels (numbers) are assigned arbitrarily** by the K-Means algorithm and carry no ordinal meaning. The narrative below identifies clusters by their structural profiles. Three structural types are identifiable in a *k* = `r k_final` global solution.
+
+---
+
+**The Structurally Resilient Group (Cluster `r cl_resilient`, *n* = `r n_resilient` countries at `r REF_YEAR`).**
+
+This cluster scores substantially above the global average on all five resilience indicators and substantially below average on the exposure indicators. Looking at the heatmap (Section 5.7), this is the cluster with the deepest blue cells on GDP per capita (z ≈ `r gz(cl_resilient, GDP_pc)`), R&D intensity (z ≈ `r gz(cl_resilient, RD_Intensity)`), internet users (z ≈ `r gz(cl_resilient, Internet_Users)`), and tertiary education (z ≈ `r gz(cl_resilient, Tertiary_Edu)`), and the most negative values on agricultural employment (z ≈ `r gz(cl_resilient, Agric_Empl)`). Youth unemployment is also below average (z ≈ `r gz(cl_resilient, Unemp_Youth)`), indicating healthier labour market entry conditions for young people.
+
+In plain terms: these are economies where a substantial share of the population is connected to the internet, educated beyond secondary level, and working in technology-intensive sectors; where governments and firms invest heavily in R&D; and where agriculture accounts for a small fraction of employment. These structural features represent genuine buffers against AI-driven displacement — not because these countries are immune, but because they have the human capital to adapt, retrain, and — critically — to *create* AI rather than only be affected by it.
+
+`r round(pct_adv_resilient, 0)`% of this cluster's members are classified as Advanced Economies by the World Bank (cluster composition table, Section 5.7). The prototype countries (closest to the centroid) provide the clearest illustration of the group's structural archetype — see the prototypes table, Section 5.7.
+
+---
+
+**The Structurally Exposed Group (Cluster `r cl_exposed`, *n* = `r n_exposed` countries at `r REF_YEAR`).**
+
+This cluster shows the opposite profile: it is the deepest red on the heatmap for agricultural employment (z ≈ `r gz(cl_exposed, Agric_Empl)`) and youth unemployment (z ≈ `r gz(cl_exposed, Unemp_Youth)`), and the deepest blue (most negative) for GDP per capita (z ≈ `r gz(cl_exposed, GDP_pc)`), R&D intensity (z ≈ `r gz(cl_exposed, RD_Intensity)`), internet users (z ≈ `r gz(cl_exposed, Internet_Users)`), and tertiary education (z ≈ `r gz(cl_exposed, Tertiary_Edu)`).
+
+In concrete terms: a large share of employment in this group is concentrated in agriculture — a sector characterised by manual task intensity, low capital investment, and limited digital connectivity. At the same time, the low R&D intensity, low tertiary attainment, and low internet penetration mean there are few structural buffers to absorb or redirect workers displaced by automation. Youth unemployment above the global average compounds this: young people who already face difficulty entering the labour market will face even more competition as AI lowers the cost of routine task automation.
+
+`r round(pct_dev_exposed, 0)`% of this cluster's members are classified as Developing Economies by the World Bank — consistent with the structural profile described above, though the unsupervised algorithm arrived at this grouping without access to the income classification.
+
+---
+
+**The Intermediate Group(s)** `r if(length(cl_middle) == 1) paste0("(Cluster ", cl_middle, ")") else paste0("(Clusters ", paste(cl_middle, collapse=", "), ")")` occupy the structural space between the two poles. These clusters tend to show moderate positive z-scores on industrial employment (reflecting larger manufacturing sectors) alongside moderate negative z-scores on the development indicators. This is the group most at risk from what development economists have called the **automation trap**: industrial employment is currently their growth engine, but it is precisely the sector where AI-driven robotics and process automation are advancing fastest. If automation eliminates these jobs before the economy builds the educational and R&D capacity to absorb displaced workers into higher-value activities, the transition window may close.
+
+Within the intermediate group(s), the boxplots by cluster (Section 5.7) reveal considerable within-cluster variance on most indicators — confirming that these are not tightly homogeneous groups but rather a collection of countries that share a broadly similar structural position without being identical in every respect. This is also where the lowest silhouette values (Section 5.2) are typically concentrated, consistent with the interpretation that some member countries sit close to the boundary with the resilient or exposed groups.
+
+**The automation trap — operationalised.** We define countries as falling into the "automation trap" when they simultaneously exhibit (a) above-median industrial employment share, (b) below-median R&D intensity, and (c) below-median tertiary education enrolment. These are economies whose current growth engine — manufacturing — is precisely the sector most exposed to AI-driven robotics, while lacking the human capital and innovation capacity to pivot into higher-value activities. `r { trap <- df_pca |> filter(Industry_Empl > median(Industry_Empl), RD_Intensity < median(RD_Intensity), Tertiary_Edu < median(Tertiary_Edu)); paste0("At the reference year, ", nrow(trap), " countries meet all three criteria: ", paste(trap$country[1:min(5, nrow(trap))], collapse = ", "), if(nrow(trap) > 5) paste0(", and ", nrow(trap) - 5, " others") else "", ". These countries face the sharpest version of Acemoglu and Restrepo's (2020) 'displacement without reinstatement' dynamic — their industrial jobs are automatable, but they lack the structural capacity to generate the new complementary tasks that historically offset automation-driven displacement.") }`
+
+---
+
+**Country case studies.** To ground the cluster profiles in concrete country-level narratives, we highlight four illustrative cases drawn from the prototypes (Section 5.7) and the vulnerability rankings (Section 6):
+
+```{r case-studies, results='asis'}
+# Select illustrative countries from different tiers
+cases <- rank_vuln |>
+  mutate(abs_rank = row_number(),
+         pct_rank = abs_rank / n() * 100) |>
+  filter(iso3c %in% c(
+    # Most resilient prototype
+    df_cluster$iso3c[which.min(rank_vuln$Vulnerability)],
+    # Most vulnerable prototype
+    df_cluster$iso3c[which.max(rank_vuln$Vulnerability)],
+    # An intermediate country near the median
+    df_cluster$iso3c[which.min(abs(rank_vuln$Vulnerability - median(rank_vuln$Vulnerability)))],
+    # A high-income but relatively exposed country
+    {hi_exposed <- rank_vuln |> filter(Development_Tier == "Advanced") |> slice_max(Vulnerability, n=1); hi_exposed$iso3c}
+  ))
+
+for (i in seq_len(nrow(cases))) {
+  cc <- cases[i, ]
+  cat(sprintf("\n- **%s** (%s, Cluster %s): Vulnerability = %.2f (rank %d of %d). ",
+              cc$country, cc$Development_Tier, cc$km_cluster,
+              cc$Vulnerability, cc$abs_rank, nrow(rank_vuln)))
+  if (cc$Vulnerability > 0.5) {
+    cat("High exposure driven by above-average agricultural employment and youth unemployment, combined with weak digital infrastructure and negligible R&D investment.")
+  } else if (cc$Vulnerability < -0.5) {
+    cat("Strong resilience buffers: high R&D intensity, broad tertiary education, near-universal internet access, and low dependence on primary-sector employment.")
+  } else if (cc$Development_Tier == "Advanced") {
+    cat("Despite high-income status, this country shows structural vulnerabilities — potentially lower R&D intensity or higher youth unemployment relative to Advanced Economy peers.")
+  } else {
+    cat("An intermediate case: moderate structural buffers offset moderate exposure, placing this country near the global median — the policy margin is narrow in either direction.")
+  }
+  cat("\n")
+}
+```
+
+**Cluster–tier alignment.** Fisher's exact test of association between cluster membership and development tier (*p* `r format.pval(fisher_res$p.value, digits = 3)`, 10,000 Monte Carlo simulations) is highly significant, with Cramér's V = `r round(cramers_v, 2)` (cluster composition table and bar chart, Section 5.7). Cramér's V ranges from 0 (no association) to 1 (perfect correspondence). A value of `r round(cramers_v, 2)` indicates `r if(cramers_v >= 0.70) "a strong association" else if(cramers_v >= 0.50) "a moderate-to-strong association" else "a moderate association"` — the unsupervised clustering has recovered much of the global income hierarchy, but not all of it. The gap between the observed Cramér's V and 1.0 is exactly where the analysis adds value beyond income classification: it captures within-tier heterogeneity that a simple high/middle/low-income label cannot.
+
+---
+
+## 8.5 External Validation: Oxford AI Readiness Index
+
+**What this section tests.** The Oxford Insights Government AI Readiness Index was deliberately excluded from the PCA and clustering pipeline (Section 3.3). It is used here as a blind external validator: if countries our WDI-based clustering identifies as structurally resilient independently score higher on a government AI readiness assessment constructed by a different organisation from different source data, that is strong evidence the clusters capture genuine differences in AI preparedness — not artefacts of variable selection.
+
+**Coverage.** The 2025 Oxford index scores are available for `r ox_n_covered` of the `r nrow(oxford_val)` countries in our reference-year cluster sample (`r ox_coverage_pct`% coverage; external validation table, Section 5.8). Countries without an Oxford score are excluded from the validation comparisons below but remain in the clustering. The `r nrow(oxford_val) - ox_n_covered` uncovered countries are `r if(nrow(oxford_val) - ox_n_covered == 0) "none — full coverage." else "mostly small states and territories not included in the Oxford index's scope."`
+
+**Temporal note.** The Oxford index is a 2025 cross-section; the clustering reference year is `r REF_YEAR`. We treat the Oxford scores as a slow-moving institutional capacity proxy — government digital readiness, regulatory frameworks, and AI infrastructure evolve on decade-long timescales rather than year to year — rather than as a time-matched observation. This assumption is plausible but not verified, and any rapid institutional change between `r REF_YEAR` and 2025 could weaken the validation signal for specific countries.
+
+**Overall score by cluster.** `r if(has_ox) paste0("The structurally resilient cluster (Cluster ", cl_resilient, ") has a mean Oxford overall score of ", ox_resilient, "/100, while the structurally exposed cluster (Cluster ", cl_exposed, ") has a mean score of ", ox_exposed, "/100 (external validation table, Section 5.8). The direction of this difference is exactly what the structural profiling predicts: countries with more R&D, education, and digital infrastructure are also assessed by an independent instrument as better positioned to leverage AI at the government level. This convergence across independent data sources and methodologies is the strongest validation result in the analysis.") else "Oxford data were not available for external validation."`
+
+**Pillar-level patterns.** The pillar heatmap (Section 5.8) disaggregates the Oxford index into six components: policy capacity, AI infrastructure, governance, public sector adoption, development and diffusion, and resilience. The pattern is informative in two ways. First, the gradient across the six pillars broadly follows the overall score ordering — the structurally resilient cluster scores above the cross-cluster mean on most pillars. Second, and more interestingly, some pillars show different within-tier ordering than the overall score. For example, "governance" and "public sector adoption" may show less separation between clusters than "AI infrastructure" — indicating that some structurally exposed countries have invested in regulatory frameworks even where hard infrastructure and human capital remain limited. Where such divergences appear in the heatmap, they point to specific policy levers that could break the structural exposure cycle.
+
+**Kaggle synthetic metrics.** Automation rate and AI readiness score data from the Kaggle synthetic dataset are available for `r kaggle_n` countries in the reference-year sample (external validation table, Section 5.8). Because these values are model-generated rather than empirically observed, we state the cluster means for completeness and do not draw analytical conclusions from them. They are included solely because they were part of the original data collection and their presence in the dataset should be transparent.
+
+---
+
+## 8.6 Vulnerability Rankings: The Sharpest Numbers, and Their Limits
+
+The composite Vulnerability Index (Section 6) collapses the multi-dimensional cluster profiles into a single rank-ordered score: Exposure (mean z-score of agricultural employment, industrial employment, youth unemployment) minus Resilience (mean z-score of GDP per capita, R&D intensity, tertiary education, internet users, labour force participation). The formula and the variables included are stated explicitly in Section 6, along with the rationale for excluding `HiTech_Exports` (overlaps with other resilience indicators) and `GDP_Growth` (cyclical, not structural).
+
+**What the rankings show.** The top-10 most vulnerable countries (top-10 table, Section 6) are drawn overwhelmingly from the Developing Economies tier and are characterised by very high agricultural employment shares, high youth unemployment, and near-zero R&D intensity. The top-10 most resilient countries are drawn from the Advanced Economies tier and show near-inverse profiles on every indicator. The mean vulnerability by tier table (Section 6) confirms the monotonic gradient: Developing Economies average the highest vulnerability score, Emerging Economies sit in the middle, and Advanced Economies average the most negative (most resilient) values.
+
+**The geographic pattern.** The world map of the vulnerability index (Section 7) visualises this gradient as a red-to-blue choropleth. The broad red-to-blue transition from sub-Saharan Africa and parts of South and Southeast Asia toward Western Europe, North America, and East Asia is consistent with the tier-level rankings. The cluster map alongside it reveals finer within-tier distinctions — for example, separating Gulf Cooperation Council countries (high income but lower R&D and smaller tertiary educated populations than OECD peers) from Nordic economies (high income and high innovation intensity).
+
+**What the rankings cannot tell you.** Three caveats apply to any single-number vulnerability index and are stated here plainly:
+
+1. **Equal weighting is transparent but not necessarily correct.** Assigning equal weight to all exposure indicators and equal weight to all resilience indicators is a deliberate choice for reproducibility and comparability. A government or researcher who believes, for example, that R&D intensity matters twice as much as internet penetration for resilience should reconstruct the index with their preferred weights from the published z-scores.
+
+2. **The ranking describes structural position, not predicted outcomes.** A country ranked as highly vulnerable is not predicted to suffer; it lacks the structural buffers that have historically allowed wealthier countries to adapt to technological transitions. Whether it does adapt depends on policy choices, investment decisions, and technological change trajectories that this index does not model.
+
+3. **The ranking applies only to the analysed sample.** As stated in Section 8.1, the countries most vulnerable in the world are disproportionately absent from this sample. The worst-ranked country in our dataset may not be the worst-ranked in a full-coverage analysis.
+
+---
+
+## 8.7 Limitations Summary
+
+The following limitations apply to all findings in this report. They are not boilerplate; each has a specific, material consequence for interpretation.
+
+**1. Complete-case selection excludes the most vulnerable countries.** The complete-case filter removes `r n_distinct(all_data$iso3c) - n_distinct(df_cc$iso3c)` countries from the analysis, predominantly from the Developing Economies tier, because these countries do not systematically report R&D expenditure and tertiary education attainment to the World Bank. The sample that remains is, by construction, better-off than the global population of countries. Any claims about "the most vulnerable countries in the world" should be prefaced with "among those for which data are available."
+
+**2. Cross-sectional PCA discards temporal information.** PCA and clustering are performed on the reference-year cross-section (`r REF_YEAR`) to avoid pseudo-replication. This eliminates within-country temporal contamination but also discards potentially valuable information about countries' trajectories. The temporal trajectory plots (Section 7) partially address this by projecting panel data into the PCA space, but the clustering itself is static.
+
+**3. The proxy variables measure sector shares, not task-level automatability.** Agricultural and industrial employment shares identify *which sectors* employ a country's workforce, but not *what tasks* those workers perform. A manufacturing sector dominated by precision engineering faces a different automation risk than one dominated by low-wage assembly work — yet both receive the same `Industry_Empl` score. Frey and Osborne (2017)-type occupation-level automatability estimates would sharpen the exposure measure but are not globally available.
+
+**4. The vulnerability index uses equal weights.** Equal weighting is transparent and reproducible, but there is no empirical basis for claiming these are the "correct" weights. The sensitivity analysis (Section 6) demonstrates that rankings are broadly stable across alternative specifications, but the exact rank positions of middle-ranked countries do shift.
+
+**5. Oxford AI Readiness Index temporal gap.** The Oxford index is from 2025; the clustering reference year is `r REF_YEAR`. Countries that experienced rapid digital or institutional transformation in the intervening period may show a mismatch between their cluster assignment and their Oxford score. The "slow-moving institutional proxy" assumption is plausible but untested in this analysis.
+
+**6. Kaggle data are synthetic.** The Kaggle automation rate and AI readiness scores are model-generated values, not empirical observations. They are included only for completeness and carry no evidential weight in the core findings.
+
+------------------------------------------------------------------------
+
+# 9. Conclusions
+
+## 9.1 Key Findings
+
+This analysis set out to identify which countries worldwide face the greatest risk from AI-driven economic disruption and to determine whether vulnerability clusters systematically along the global development hierarchy. The clustering typology is based on a **cross-section at the reference year (`r REF_YEAR`)** — the year with the most complete-case coverage — applied to `r n_distinct(df_cluster$iso3c)` countries with valid data on all `r length(analysis_vars)` structural indicators. The vulnerability index measures **macro-structural vulnerability to AI-enabled disruption** and does not directly measure occupation- or task-level automatability. With those scope conditions in mind, we arrived at the following findings:
+
+1. **The global economic landscape is described by a dominant development axis.** PCA identified `r n_retain` principal components explaining `r round(cum_var, 1)`% of total variance. The first and largest component captures a **global development and digital readiness dimension** that separates high-income, innovation-intensive economies from low-income, agrarian-sector-dominant economies. This single dimension accounts for the largest share of cross-country variation, reflecting the deep co-movement of GDP, education, R&D, internet penetration, and sectoral composition that characterises the global development divide.
+
+2. **Countries cluster into `r k_final` structurally distinct global typologies at `r REF_YEAR`.** All three clustering methods — K-Means, Hierarchical (Ward.D2), and Model-Based Gaussian Mixture — produced groupings with `r if (min(ari_km_hc, ari_km_mc, ari_hc_mc) >= 0.8) "strong" else if (min(ari_km_hc, ari_km_mc, ari_hc_mc) >= 0.65) "moderate-to-strong" else "moderate"` cross-method agreement (minimum ARI = `r round(min(ari_km_hc, ari_km_mc, ari_hc_mc), 2)`), and linkage sensitivity analysis confirmed that Ward.D2 produces results consistent with alternative linkage rules. The clusters broadly correspond to the World Bank income tiers but reveal meaningful within-tier heterogeneity — for example, distinguishing resource-export-dependent high-income economies from innovation-driven high-income economies, or rapidly industrialising middle-income economies from those stagnating in low-value manufacturing.
+
+3. **Vulnerability is strongly predicted by development tier, but not perfectly.** Low-income countries are, on average, the most vulnerable: high agricultural employment, high youth unemployment, and weak digital infrastructure combine with negligible R&D capacity and low educational attainment. However, some middle-income countries with large industrial sectors and rigid labour markets rank among the more exposed — they face automation risk in their manufacturing base without the resilience buffers of wealthier nations. Conversely, high-income countries as a group are the most resilient, but even within this tier there is meaningful variation between innovation leaders and those that depend heavily on service sectors with limited R&D investment.
+
+4. **The Advanced / Emerging / Developing tier classification is a useful but imperfect predictor of AI vulnerability.** The World Bank income classification captures the broad structural gradient well, but within-tier variation matters: an Emerging Economy with strong digital infrastructure, broad tertiary education, and growing R&D investment may be more resilient than its income rank suggests, while an Advanced Economy with structural unemployment and low innovation intensity may be more exposed than its wealth implies.
+
+## 9.2 Limitations
+
+-   **Systematic undercoverage of low-income countries**: The complete-case filter disproportionately excludes low-income countries where R&D spending and tertiary education attainment are not consistently reported. The vulnerability rankings therefore under-represent the world's least-developed and potentially most-vulnerable economies.
+-   **No direct task-level automatability measure**: The vulnerability index captures macro-structural exposure (sector shares, labour market fragility) rather than occupation- or task-level automatability (Frey & Osborne 2017). Ideally, occupation-level task composition data would be used, but these are not globally available.
+-   **Synthetic Kaggle data**: Used only for external validation, not in the core analysis. Its values are modelled rather than observed.
+
+## 9.3 Policy Implications
+
+The findings point to actionable policy recommendations differentiated by development tier:
+
+**For High-Income Countries:**
+1. **Invest in frontier R&D**: Sustaining first-mover advantages in AI development —rather than merely adopting it —requires sustained public and private investment in fundamental and applied research.
+2. **Proactive labour market policies**: Even resilient economies face structural displacement in specific occupations. Anticipatory reskilling programmes, portable social protection, and active labour market policies should be institutionalised before disruption peaks.
+
+**For Middle-Income Countries:**
+3. **Avoid the automation trap**: Countries in the middle of industrialisation risk having their manufacturing jobs automated away before they develop the service-sector and innovation capacity to absorb displaced workers. Policies that accelerate education quality and digital infrastructure expansion are critical.
+4. **Regional and multilateral cooperation**: Middle-income countries individually lack the scale to shape global AI governance or attract frontier AI investment. ASEAN, AU, MERCOSUR, and similar regional bodies can coordinate AI strategy and data-sharing agreements.
+
+**For Low-Income Countries:**
+5. **Prioritise digital access as infrastructure**: Household internet access and mobile connectivity are prerequisites for any form of AI-augmented economic participation. These should be treated as essential public goods and funded through both domestic budgets and international development finance.
+6. **Conditional technology transfer**: International climate and development finance frameworks (e.g., Just Energy Transition Partnerships) offer a model for embedding technology transfer, education, and institutional capacity-building alongside investment flows. Similar mechanisms for AI readiness support should be explored.
+
+------------------------------------------------------------------------
+
+# References
+
+-   Acemoglu, D. & Restrepo, P. (2020). Robots and Jobs: Evidence from US Labor Markets. *Journal of Political Economy*, 128(6), 2188–2244. [doi:10.1086/705716](https://doi.org/10.1086/705716)
+-   Acemoglu, D. & Restrepo, P. (2019). Automation and New Tasks: How Technology Displaces and Reinstates Labor. *Journal of Economic Perspectives*, 33(2), 3–30. [doi:10.1257/jep.33.2.3](https://doi.org/10.1257/jep.33.2.3)
+-   Autor, D. H. (2015). Why Are There Still So Many Jobs? The History and Future of Workplace Automation. *Journal of Economic Perspectives*, 29(3), 3–30. [doi:10.1257/jep.29.3.3](https://doi.org/10.1257/jep.29.3.3)
+-   Brynjolfsson, E. & McAfee, A. (2014). *The Second Machine Age: Work, Progress, and Prosperity in a Time of Brilliant Technologies*. W. W. Norton.
+-   Charrad, M., Ghazzali, N., Boiteau, V. & Niknafs, A. (2014). NbClust: An R Package for Determining the Relevant Number of Clusters in a Data Set. *Journal of Statistical Software*, 61(6), 1–36. [doi:10.18637/jss.v061.i06](https://doi.org/10.18637/jss.v061.i06)
+-   Frey, C. B. & Osborne, M. A. (2017). The Future of Employment: How Susceptible Are Jobs to Computerisation? *Technological Forecasting and Social Change*, 114, 254–280. [doi:10.1016/j.techfore.2016.08.019](https://doi.org/10.1016/j.techfore.2016.08.019)
+-   Hayton, J. C., Allen, D. G. & Scarpello, V. (2004). Factor Retention Decisions in Exploratory Factor Analysis: A Tutorial on Parallel Analysis. *Organizational Research Methods*, 7(2), 191–205.
+-   Horn, J. L. (1965). A Rationale and Test for the Number of Factors in Factor Analysis. *Psychometrika*, 30(2), 179–185.
+-   Hubert, L. & Arabie, P. (1985). Comparing Partitions. *Journal of Classification*, 2(1), 193–218.
+-   Kaiser, H. F. (1974). An Index of Factorial Simplicity. *Psychometrika*, 39(1), 31–36.
+-   Kaufman, L. & Rousseeuw, P. J. (1990). *Finding Groups in Data: An Introduction to Cluster Analysis*. Wiley.
+-   Le, S., Josse, J. & Husson, F. (2008). FactoMineR: An R Package for Multivariate Analysis. *Journal of Statistical Software*, 25(1), 1–18. [doi:10.18637/jss.v025.i01](https://doi.org/10.18637/jss.v025.i01)
+-   OECD (2023). *OECD Employment Outlook 2023: Artificial Intelligence and the Labour Market*. OECD Publishing, Paris. [doi:10.1787/08785bba-en](https://doi.org/10.1787/08785bba-en)
+-   Oxford Insights (2025). *Government AI Readiness Index 2025*. Oxford Insights. [oxfordinsights.com/ai-readiness/ai-readiness-index/](https://oxfordinsights.com/ai-readiness/ai-readiness-index/)
+-   Scrucca, L., Fop, M., Murphy, T. B. & Raftery, A. E. (2016). mclust 5: Clustering, Classification and Density Estimation Using Gaussian Finite Mixture Models. *The R Journal*, 8(1), 289–317. [doi:10.32614/RJ-2016-021](https://doi.org/10.32614/RJ-2016-021)
+-   Sokal, R. R. & Rohlf, F. J. (1962). The Comparison of Dendrograms by Objective Methods. *Taxon*, 11(2), 33–40.
+-   Tibshirani, R., Walther, G. & Hastie, T. (2001). Estimating the Number of Clusters in a Data Set via the Gap Statistic. *Journal of the Royal Statistical Society: Series B (Statistical Methodology)*, 63(2), 411–423. [doi:10.1111/1467-9868.00293](https://doi.org/10.1111/1467-9868.00293)
+-   World Bank (2024). *World Development Indicators*. World Bank DataBank. [databank.worldbank.org](https://databank.worldbank.org)
+-   World Economic Forum (2023). *The Future of Jobs Report 2023*. World Economic Forum, Geneva.
+-   Kaggle (2024). *Global AI Workforce Automation 2015–2025* (synthetic dataset). [kaggle.com](https://www.kaggle.com)
+
+------------------------------------------------------------------------
+
+```{r session-info}
+sessionInfo()
+```
+
+*This report was prepared as a midterm project for the Advanced Modelling course (Master in Computational Social Science, Universidad Carlos III de Madrid). All primary data are sourced from the World Bank World Development Indicators API, fetched reproducibly using the WDI package for R. Running this R Markdown document from source will regenerate every figure, table, and result presented above. Supplementary CSV files (Kaggle and Oxford Insights) must be placed in a `data/` subfolder.*

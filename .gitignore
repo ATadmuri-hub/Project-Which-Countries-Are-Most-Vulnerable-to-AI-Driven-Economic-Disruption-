@@ -1,0 +1,20 @@
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Knitr cache and output
+*_cache/
+*_files/
+
+# Rendered output (regenerate from .Rmd)
+*.html
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Microsoft Office lock files
+~$*
